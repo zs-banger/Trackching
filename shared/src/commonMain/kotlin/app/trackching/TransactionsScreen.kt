@@ -28,10 +28,11 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
+import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalTime::class)
 @Composable
-fun TransactionsScreen(ledger: Ledger) {
+fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit) {
     val c = TrackchingTheme.colors
     val rows by remember(ledger) { ledger.history() }.collectAsState(initial = emptyList())
     val zone = remember { TimeZone.currentSystemDefault() }
@@ -54,7 +55,7 @@ fun TransactionsScreen(ledger: Ledger) {
                 DayHeader(dayLabel(day.date, today), day.net)
             }
             items(day.items, key = { it.id }) { row ->
-                TxnRow(row)
+                TxnRow(row, onClick = { onOpen(row.id) })
             }
         }
     }
@@ -75,7 +76,7 @@ private fun DayHeader(label: String, net: Long) {
 }
 
 @Composable
-private fun TxnRow(row: History) {
+private fun TxnRow(row: History, onClick: () -> Unit) {
     val c = TrackchingTheme.colors
     val kind = kindOf(row.kind)
     val title = row.category_name ?: "Transfer"
@@ -86,7 +87,7 @@ private fun TxnRow(row: History) {
         AmountKind.Transfer -> c.ink2
     }
     Row(
-        Modifier.fillMaxWidth().background(c.band).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).background(c.band).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {

@@ -48,3 +48,15 @@ JOIN account a ON a.id = t.account_id
 LEFT JOIN account ta ON ta.id = t.to_account_id
 LEFT JOIN category c ON c.id = t.category_id
 ORDER BY t.occurred_at DESC, t.id DESC;
+
+byId:
+SELECT * FROM txn WHERE id = ?;
+
+update:
+UPDATE txn
+SET kind = ?, centavos = ?, account_id = ?, to_account_id = ?, category_id = ?, occurred_at = ?
+WHERE id = ?;
+
+-- Puts a deleted row back with its original id ("Deleted · Undo").
+restore:
+INSERT INTO txn VALUES ?;
