@@ -1,0 +1,99 @@
+package app.trackching
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.trackching.db.History
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalTime::class)
+@Composable
+fun TransactionsScreen(ledger: Ledger) {
+    val c = TrackchingTheme.colors
+    val rows by remember(ledger) { ledger.history() }.collectAsState(initial = emptyList())
+    val zone = remember { TimeZone.currentSystemDefault() }
+    val today = remember { Clock.System.todayIn(zone) }
+    val days = remember(rows) { groupByDay(rows, zone) }
+
+    if (days.isEmpty()) {
+        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Text("No transactions yet. Tap + to log one.", color = c.ink2, fontSize = 15.sp)
+        }
+        return
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 96.dp), // room for the + button
+    ) {
+        days.forEach { day ->
+            stickyHeader(key = day.date.toString()) {
+                DayHeader(dayLabel(day.date, today), day.net)
+            }
+            items(day.items, key = { it.id }) { row ->
+                TxnRow(row)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayHeader(label: String, net: Long) {
+    val c = TrackchingTheme.colors
+    Row(
+        Modifier.fillMaxWidth().background(c.band2).padding(start = 12.dp, end = 16.dp, top = 16.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Tag(label)
+        val kind = if (net < 0) AmountKind.Expense else if (net > 0) AmountKind.Income else AmountKind.Transfer
+        Text(formatAmount(net, kind), color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun TxnRow(row: History) {
+    val c = TrackchingTheme.colors
+    val kind = kindOf(row.kind)
+    val title = row.category_name ?: "Transfer"
+    val subtitle = if (row.to_account_name != null) "${row.account_name} → ${row.to_account_name}" else row.account_name
+    val amountColor = when (kind) {
+        AmountKind.Expense -> c.expense
+        AmountKind.Income -> c.income
+        AmountKind.Transfer -> c.ink2
+    }
+    Row(
+        Modifier.fillMaxWidth().background(c.band).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(formatAmount(row.centavos, kind), color = amountColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+    }
+}
