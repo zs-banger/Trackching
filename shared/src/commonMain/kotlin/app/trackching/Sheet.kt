@@ -33,6 +33,7 @@ import trackching.shared.generated.resources.ic_close
 fun TrackchingSheet(
     title: String,
     onDismiss: () -> Unit,
+    swipeToClose: Boolean = true,
     action: @Composable (close: () -> Unit) -> Unit = {},
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
 ) {
@@ -49,6 +50,7 @@ fun TrackchingSheet(
         shape = RectangleShape,
         containerColor = c.sheet,
         dragHandle = null,
+        sheetGesturesEnabled = swipeToClose,
     ) {
         Box(Modifier.fillMaxWidth().height(4.dp).background(c.blue))
         Row(
