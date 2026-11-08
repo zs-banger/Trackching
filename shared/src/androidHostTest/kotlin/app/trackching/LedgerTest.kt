@@ -131,4 +131,32 @@ class LedgerTest {
         assertEquals(1_000, rows.size)
         assertEquals(999L, rows.first().occurred_at) // newest first
     }
+
+    @Test
+    fun editingChangesTheBalance() {
+        val id = ledger.logExpense(12_000, category("Meals"), cash(), 0)
+        val row = ledger.get(id)!!
+        ledger.update(row.copy(centavos = 20_000))
+        assertEquals(-20_000L, ledger.balance(cash()))
+    }
+
+    @Test
+    fun deleteThenRestoreIsExact() {
+        val id = ledger.logExpense(12_000, category("Meals"), cash(), 1_234)
+        val before = ledger.get(id)!!
+        val deleted = ledger.delete(id)!!
+        assertEquals(0L, ledger.balance(cash()))
+        ledger.restore(deleted)
+        assertEquals(before, ledger.get(id))          // same id, same everything
+        assertEquals(-12_000L, ledger.balance(cash()))
+    }
+
+    @Test
+    fun editingIntoABrokenTransferIsRejected() {
+        val id = ledger.logExpense(12_000, category("Meals"), cash(), 0)
+        val row = ledger.get(id)!!
+        assertFailsWith<IllegalArgumentException> {
+            ledger.update(row.copy(kind = "TRANSFER", category_id = null, to_account_id = cash()))
+        }
+    }
 }
