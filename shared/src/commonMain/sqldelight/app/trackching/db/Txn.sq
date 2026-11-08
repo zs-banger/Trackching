@@ -21,12 +21,12 @@ DELETE FROM txn WHERE id = ?;
 lastId:
 SELECT last_insert_rowid();
 
--- The account of the most recently *entered* expense (not the latest date),
--- so a back-dated entry still counts as "last used".
+-- The account of the most recently *entered* expense.
 lastAccountUsed:
-SELECT account_id FROM txn
-WHERE kind = 'EXPENSE'
-ORDER BY id DESC
+SELECT t.account_id FROM txn t
+JOIN account a ON a.id = t.account_id
+WHERE t.kind = 'EXPENSE' AND a.archived = 0
+ORDER BY t.id DESC
 LIMIT 1;
 
 -- Income and spending between two moments. Transfers are left out on purpose.

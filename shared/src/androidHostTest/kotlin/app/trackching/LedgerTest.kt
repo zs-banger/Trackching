@@ -187,4 +187,43 @@ class LedgerTest {
         val id = ledger.addAccount("  Maya  ", AccountType.EWallet, AccountColors[0], 0)
         assertEquals("Maya", ledger.accounts().first { it.id == id }.name)
     }
+
+    @Test
+    fun orderSurvivesAReload() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        val bpi = ledger.addAccount("BPI", AccountType.Bank, AccountColors[2], 0)
+        ledger.reorder(listOf(bpi, cash(), gcash))
+        val fresh = Ledger(db) // like restarting the app: a new Ledger, same database
+        assertEquals(listOf("BPI", "Cash on hand", "GCash"), fresh.accounts().map { it.name })
+    }
+
+    @Test
+    fun archivedAccountLeavesPickersButKeepsItsTransactions() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        ledger.logExpense(5_000, category("Meals"), gcash, 0)
+        ledger.archive(gcash)
+        assertTrue(ledger.accounts().none { it.id == gcash })
+        assertEquals(1, db.txnQueries.history().executeAsList().size)
+    }
+
+    @Test
+    fun archivedAccountIsNotTheDefault() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        ledger.logExpense(5_000, category("Meals"), gcash, 0)
+        ledger.archive(gcash)
+        assertEquals(cash(), ledger.lastAccountUsed())
+    }
+
+    @Test
+    fun restoredAccountComesBack() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        ledger.archive(gcash)
+        ledger.restoreAccount(gcash)
+        assertTrue(ledger.accounts().any { it.id == gcash })
+    }
+
+    @Test
+    fun lastAccountCannotBeArchived() {
+        assertFailsWith<IllegalArgumentException> { ledger.archive(cash()) }
+    }
 }
