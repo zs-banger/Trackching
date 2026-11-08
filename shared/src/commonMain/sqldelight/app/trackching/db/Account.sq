@@ -12,7 +12,8 @@ insert:
 INSERT INTO account(name, starting_centavos) VALUES (?, ?);
 
 create:
-INSERT INTO account(name, type, color, starting_centavos) VALUES (?, ?, ?, ?);
+INSERT INTO account(name, type, color, starting_centavos, sort_order)
+VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM account));
 
 nameTaken:
 SELECT COUNT(*) FROM account WHERE name = ? COLLATE NOCASE;
