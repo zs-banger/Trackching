@@ -4,7 +4,8 @@ CREATE TABLE account (
     type TEXT NOT NULL DEFAULT 'CASH' CHECK (type IN ('CASH', 'BANK', 'EWALLET', 'CREDIT')),
     color INTEGER NOT NULL DEFAULT 4288379903, -- 0xFF9B7BFF, purple
     starting_centavos INTEGER NOT NULL DEFAULT 0,
-    archived INTEGER NOT NULL DEFAULT 0
+    archived INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0
 );
 
 insert:
@@ -41,7 +42,7 @@ SELECT COUNT(*) FROM account;
 active:
 SELECT id, name FROM account
 WHERE archived = 0
-ORDER BY id;
+ORDER BY sort_order, id;
 
 balances:
 SELECT a.id, a.name, a.color, CAST(a.starting_centavos + COALESCE(SUM(
@@ -57,4 +58,19 @@ FROM account a
 LEFT JOIN txn t ON t.account_id = a.id OR t.to_account_id = a.id
 WHERE a.archived = 0
 GROUP BY a.id
-ORDER BY a.id;
+ORDER BY a.sort_order, a.id;
+
+-- Every account, archived last, for the Manage screen.
+manageList:
+SELECT id, name, color, archived
+FROM account
+ORDER BY archived, sort_order, id;
+
+setOrder:
+UPDATE account SET sort_order = ? WHERE id = ?;
+
+setArchived:
+UPDATE account SET archived = ? WHERE id = ?;
+
+countActive:
+SELECT COUNT(*) FROM account WHERE archived = 0;
