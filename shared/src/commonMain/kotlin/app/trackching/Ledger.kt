@@ -103,4 +103,19 @@ class Ledger(private val db: TrackchingDatabase) {
     fun restore(txn: Txn) {
         db.txnQueries.restore(txn)
     }
+
+    /** Creates an account and returns its id. Names are unique, ignoring case. */
+    fun addAccount(name: String, type: AccountType, color: Long, startingCentavos: Long): Long {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "An account needs a name" }
+        require(db.accountQueries.nameTaken(clean).executeAsOne() == 0L) { "An account called $clean already exists" }
+        return db.transactionWithResult {
+            db.accountQueries.create(clean, type.dbName, color, startingCentavos)
+            db.accountQueries.lastId().executeAsOne()
+        }
+    }
+
+    /** Every account name in lowercase, for the "already exists" check. */
+    fun accountNames(): Set<String> =
+        db.accountQueries.active().executeAsList().map { it.name.lowercase() }.toSet()
 }
