@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import app.trackching.db.Txn
 
 /** The 5 bottom tabs. IOUs stays disabled until Phase 3. */
 enum class Tab(
@@ -60,6 +61,18 @@ fun AppShell(database: TrackchingDatabase) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Txn?>(null) }
+
+    // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.
+    fun showUndo(message: String, onUndo: () -> Unit) {
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val result = withTimeoutOrNull(5_000) {
+                snackbar.showSnackbar(message, actionLabel = "Undo", duration = SnackbarDuration.Indefinite)
+            }
+            if (result == SnackbarResult.ActionPerformed) onUndo()
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -99,7 +112,7 @@ fun AppShell(database: TrackchingDatabase) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (tab) {
                 Tab.Home -> HomeScreen(ledger)
-                Tab.Transactions -> TransactionsScreen(ledger)
+                Tab.Transactions -> TransactionsScreen(ledger, onOpen = { id -> editing = ledger.get(id) })
                 else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
             }
         }
@@ -107,15 +120,17 @@ fun AppShell(database: TrackchingDatabase) {
             TxnSheet(
                 ledger = ledger,
                 onDismiss = { adding = false },
-                onSaved = { txnId ->
-                    scope.launch {
-                        snackbar.currentSnackbarData?.dismiss() // replace an older "Saved"
-                        val result = withTimeoutOrNull(5_000) {
-                            snackbar.showSnackbar("Saved", actionLabel = "Undo", duration = SnackbarDuration.Indefinite)
-                        }
-                        if (result == SnackbarResult.ActionPerformed) ledger.undo(txnId)
-                    }
-                },
+                onSaved = { id -> showUndo("Saved") { ledger.undo(id) } },
+            )
+        }
+        val toEdit = editing
+        if (toEdit != null) {
+            TxnSheet(
+                ledger = ledger,
+                editing = toEdit,
+                onDismiss = { editing = null },
+                onSaved = {},
+                onDeleted = { deleted -> showUndo("Deleted") { ledger.restore(deleted) } },
             )
         }
     }

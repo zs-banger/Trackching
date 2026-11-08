@@ -34,8 +34,10 @@ import kotlin.time.ExperimentalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
 import app.trackching.db.Active
-
-private const val OneDayMillis = 24L * 60 * 60 * 1000
+import androidx.compose.material3.TextButton
+import app.trackching.db.Txn
+import kotlin.time.Instant
+import kotlinx.datetime.toLocalDateTime
 
 /** "New transaction": Expense, Income or Transfer. */
 @Composable
@@ -43,11 +45,14 @@ fun TxnSheet(
     ledger: Ledger,
     onDismiss: () -> Unit,
     onSaved: (txnId: Long) -> Unit,
+    editing: Txn? = null,
+    onDeleted: (Txn) -> Unit = {},
 ) {
     val c = TrackchingTheme.colors
-    val form = remember { TxnForm(ledger.lastAccountUsed()) }
+    val form = remember { editing?.let { TxnForm.from(it) } ?: TxnForm(ledger.lastAccountUsed()) }
     val accounts = remember { ledger.accounts() }
-    var showAll by remember { mutableStateOf(false) }
+    // When editing, show every category so the current one is visible.
+    var showAll by remember { mutableStateOf(editing != null) }
     val categoryKind = if (form.kind == AmountKind.Income) "INCOME" else "EXPENSE"
     val categories = remember(showAll, categoryKind) {
         ledger.quickCategories(categoryKind, if (showAll) 100L else 8L)
@@ -61,7 +66,20 @@ fun TxnSheet(
         else -> ""
     }
 
-    TrackchingSheet(title = "New transaction", onDismiss = onDismiss) { close ->
+    TrackchingSheet(
+        title = if (editing != null) "Edit transaction" else "New transaction",
+        onDismiss = onDismiss,
+        action = { close ->
+            if (editing != null) {
+                TextButton(onClick = {
+                    ledger.delete(editing.id)?.let(onDeleted)
+                    close()
+                }) {
+                    Text("Delete", color = c.expense, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+    ) { close ->
         SegmentedTabs(
             options = AmountKind.entries,
             selected = form.kind,
@@ -114,9 +132,17 @@ fun TxnSheet(
                 }
             }
             Field("Date") {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip(todayLabel(), selected = !form.yesterday, onClick = { form.yesterday = false })
-                    Chip("Yesterday", selected = form.yesterday, onClick = { form.yesterday = true })
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val originalLabel = form.originalAt?.let { dayLabelOf(it) }
+                    if (originalLabel != null) {
+                        Chip(originalLabel, selected = form.date == DateChoice.Original, onClick = { form.date = DateChoice.Original })
+                    }
+                    if (originalLabel != "Today") {
+                        Chip(todayLabel(), selected = form.date == DateChoice.Today, onClick = { form.date = DateChoice.Today })
+                    }
+                    if (originalLabel != "Yesterday") {
+                        Chip("Yesterday", selected = form.date == DateChoice.Yesterday, onClick = { form.date = DateChoice.Yesterday })
+                    }
                 }
             }
         }
@@ -125,7 +151,14 @@ fun TxnSheet(
             onKey = form::onKey,
             saveEnabled = form.canSave,
             onSave = {
-                val at = if (form.yesterday) nowMillis() - OneDayMillis else nowMillis()
+                val now = nowMillis()
+                val edited = form.edited(now)
+                if (edited != null) {
+                    ledger.update(edited)
+                    close()
+                    return@Keypad
+                }
+                val at = form.occurredAt(now)
                 val account = form.accountId
                 val category = form.categoryId
                 val to = form.toAccountId
@@ -249,4 +282,12 @@ private fun todayLabel(): String {
     val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
     val month = today.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
     return "Today, $month ${today.day}"
+}
+
+/** "Today", "Yesterday" or "Tue, Nov 3" for a saved moment. */
+@OptIn(ExperimentalTime::class)
+private fun dayLabelOf(millis: Long): String {
+    val zone = TimeZone.currentSystemDefault()
+    val date = Instant.fromEpochMilliseconds(millis).toLocalDateTime(zone).date
+    return dayLabel(date, Clock.System.todayIn(zone))
 }

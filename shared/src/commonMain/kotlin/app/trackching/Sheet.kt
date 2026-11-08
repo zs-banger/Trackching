@@ -33,6 +33,7 @@ import trackching.shared.generated.resources.ic_close
 fun TrackchingSheet(
     title: String,
     onDismiss: () -> Unit,
+    action: @Composable (close: () -> Unit) -> Unit = {},
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
 ) {
     val c = TrackchingTheme.colors
@@ -55,6 +56,7 @@ fun TrackchingSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.weight(1f)) { Tag(title) }
+            action(close)
             IconButton(onClick = close) {
                 Icon(painterResource(Res.drawable.ic_close), contentDescription = "Close without saving", tint = c.ink)
             }
