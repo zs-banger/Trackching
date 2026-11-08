@@ -99,6 +99,7 @@ fun AppShell(database: TrackchingDatabase) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (tab) {
                 Tab.Home -> HomeScreen(ledger)
+                Tab.Transactions -> TransactionsScreen(ledger)
                 else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
             }
         }

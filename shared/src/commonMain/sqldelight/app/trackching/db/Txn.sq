@@ -8,6 +8,9 @@ CREATE TABLE txn (
     occurred_at INTEGER NOT NULL
 );
 
+-- Makes "newest first" fast even with thousands of rows.
+CREATE INDEX txn_by_time ON txn(occurred_at);
+
 insert:
 INSERT INTO txn(kind, centavos, account_id, to_account_id, category_id, occurred_at)
 VALUES (?, ?, ?, ?, ?, ?);
@@ -33,3 +36,15 @@ SELECT
     CAST(COALESCE(SUM(CASE WHEN kind = 'EXPENSE' THEN centavos END), 0) AS INTEGER) AS spent
 FROM txn
 WHERE occurred_at >= ? AND occurred_at < ?;
+
+-- Every transaction, newest first, with the names the list shows.
+history:
+SELECT t.id, t.kind, t.centavos, t.occurred_at,
+       c.name AS category_name,
+       a.name AS account_name,
+       ta.name AS to_account_name
+FROM txn t
+JOIN account a ON a.id = t.account_id
+LEFT JOIN account ta ON ta.id = t.to_account_id
+LEFT JOIN category c ON c.id = t.category_id
+ORDER BY t.occurred_at DESC, t.id DESC;
