@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertFails
 
 class LedgerTest {
 
@@ -158,5 +159,32 @@ class LedgerTest {
         assertFailsWith<IllegalArgumentException> {
             ledger.update(row.copy(kind = "TRANSFER", category_id = null, to_account_id = cash()))
         }
+    }
+
+    @Test
+    fun newAccountShowsItsStartingBalance() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 120_000)
+        assertEquals(120_000L, ledger.balance(gcash))
+        assertTrue(ledger.accounts().any { it.name == "GCash" })
+    }
+
+    @Test
+    fun duplicateNameIsRejectedIgnoringCase() {
+        ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        assertFailsWith<IllegalArgumentException> {
+            ledger.addAccount("gcash", AccountType.EWallet, AccountColors[1], 0)
+        }
+    }
+
+    @Test
+    fun databaseAlsoBlocksDuplicates() {
+        db.accountQueries.create("BPI", "BANK", AccountColors[2], 0)
+        assertFails { db.accountQueries.create("bpi", "BANK", AccountColors[2], 0) }
+    }
+
+    @Test
+    fun namesAreTrimmed() {
+        val id = ledger.addAccount("  Maya  ", AccountType.EWallet, AccountColors[0], 0)
+        assertEquals("Maya", ledger.accounts().first { it.id == id }.name)
     }
 }
