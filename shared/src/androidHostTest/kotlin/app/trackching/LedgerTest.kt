@@ -120,4 +120,15 @@ class LedgerTest {
         ledger.logIncome(2_000_000, salary, cash(), 0)
         assertEquals(2_000_000L, ledger.balance(cash()))
     }
+
+    @Test
+    fun historyHandlesAThousandRows() {
+        val meals = category("Meals")
+        db.transaction {
+            repeat(1_000) { i -> ledger.logExpense(100, meals, cash(), i.toLong()) }
+        }
+        val rows = db.txnQueries.history().executeAsList()
+        assertEquals(1_000, rows.size)
+        assertEquals(999L, rows.first().occurred_at) // newest first
+    }
 }

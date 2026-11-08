@@ -9,6 +9,7 @@ import app.trackching.db.Totals
 import app.trackching.db.TrackchingDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import app.trackching.db.History
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -66,4 +67,8 @@ class Ledger(private val db: TrackchingDatabase) {
     /** Every account's balance, re-sent automatically whenever a transaction changes. */
     fun balances(): Flow<List<Balances>> =
         db.accountQueries.balances().asFlow().mapToList(Dispatchers.Default)
+
+    /** Every transaction, newest first. Re-sent whenever anything changes. */
+    fun history(): Flow<List<History>> =
+        db.txnQueries.history().asFlow().mapToList(Dispatchers.Default)
 }
