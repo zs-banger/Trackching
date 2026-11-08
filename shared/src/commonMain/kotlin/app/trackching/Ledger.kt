@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import app.trackching.db.History
 import app.trackching.db.Txn
+import app.trackching.db.ManageList
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -118,4 +119,25 @@ class Ledger(private val db: TrackchingDatabase) {
     /** Every account name in lowercase, for the "already exists" check. */
     fun accountNames(): Set<String> =
         db.accountQueries.active().executeAsList().map { it.name.lowercase() }.toSet()
+
+    /** All accounts for the Manage screen, archived ones last. */
+    fun manageList(): Flow<List<ManageList>> =
+        db.accountQueries.manageList().asFlow().mapToList(Dispatchers.Default)
+
+    /** Saves a new order. `ids` is every active account, top to bottom. */
+    fun reorder(ids: List<Long>) {
+        db.transaction {
+            ids.forEachIndexed { index, id -> db.accountQueries.setOrder(index.toLong(), id) }
+        }
+    }
+
+    /** Hides an account from Home and pickers. Its transactions stay. You must keep at least one. */
+    fun archive(accountId: Long) {
+        require(db.accountQueries.countActive().executeAsOne() > 1) { "Keep at least one account" }
+        db.accountQueries.setArchived(1, accountId)
+    }
+
+    fun restoreAccount(accountId: Long) {
+        db.accountQueries.setArchived(0, accountId)
+    }
 }
