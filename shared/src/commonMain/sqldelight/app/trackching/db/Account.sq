@@ -1,12 +1,20 @@
 CREATE TABLE account (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE, -- "GCash" and "gcash" count as the same
+    type TEXT NOT NULL DEFAULT 'CASH' CHECK (type IN ('CASH', 'BANK', 'EWALLET', 'CREDIT')),
+    color INTEGER NOT NULL DEFAULT 4288379903, -- 0xFF9B7BFF, purple
     starting_centavos INTEGER NOT NULL DEFAULT 0,
     archived INTEGER NOT NULL DEFAULT 0
 );
 
 insert:
 INSERT INTO account(name, starting_centavos) VALUES (?, ?);
+
+create:
+INSERT INTO account(name, type, color, starting_centavos) VALUES (?, ?, ?, ?);
+
+nameTaken:
+SELECT COUNT(*) FROM account WHERE name = ? COLLATE NOCASE;
 
 lastId:
 SELECT last_insert_rowid();
@@ -36,7 +44,7 @@ WHERE archived = 0
 ORDER BY id;
 
 balances:
-SELECT a.id, a.name, CAST(a.starting_centavos + COALESCE(SUM(
+SELECT a.id, a.name, a.color, CAST(a.starting_centavos + COALESCE(SUM(
     CASE
         WHEN t.kind = 'INCOME'   AND t.account_id    = a.id THEN  t.centavos
         WHEN t.kind = 'EXPENSE'  AND t.account_id    = a.id THEN -t.centavos

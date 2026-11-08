@@ -1,18 +1,26 @@
 package app.trackching
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,16 +30,18 @@ import androidx.compose.ui.unit.sp
 fun HomeScreen(ledger: Ledger) {
     val c = TrackchingTheme.colors
     val balances by remember(ledger) { ledger.balances() }.collectAsState(initial = emptyList())
+    var addingAccount by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Tag("Accounts")
         balances.forEach { account ->
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(account.name, color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.size(12.dp).background(Color(account.color)))
+                Text(account.name, Modifier.weight(1f), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Amount(
                     account.balance,
                     if (account.balance < 0) AmountKind.Expense else AmountKind.Transfer,
@@ -39,5 +49,18 @@ fun HomeScreen(ledger: Ledger) {
                 )
             }
         }
+        OffsetBlock(Modifier.fillMaxWidth().clickable(role = Role.Button) { addingAccount = true }) {
+            Text(
+                "+ ADD ACCOUNT",
+                Modifier.padding(12.dp),
+                color = c.onOrange,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold,
+            )
+        }
+    }
+
+    if (addingAccount) {
+        AccountSheet(ledger, onDismiss = { addingAccount = false })
     }
 }
