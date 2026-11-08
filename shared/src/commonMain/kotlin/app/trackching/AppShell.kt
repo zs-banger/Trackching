@@ -103,7 +103,7 @@ fun AppShell(database: TrackchingDatabase) {
             }
         }
         if (adding) {
-            ExpenseSheet(
+            TxnSheet(
                 ledger = ledger,
                 onDismiss = { adding = false },
                 onSaved = { txnId ->

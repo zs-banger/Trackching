@@ -81,4 +81,43 @@ class LedgerTest {
         ledger.logExpense(5_000, category("Meals"), gcash, 0)
         assertEquals(gcash, ledger.lastAccountUsed())
     }
+
+    private fun newAccount(name: String, starting: Long): Long {
+        db.accountQueries.insert(name, starting)
+        return db.accountQueries.lastId().executeAsOne()
+    }
+
+    @Test
+    fun transferMovesMoneyBetweenAccounts() {
+        val bpi = newAccount("BPI", 500_000)    // ₱5,000
+        val gcash = newAccount("GCash", 120_000) // ₱1,200
+        ledger.logTransfer(100_000, bpi, gcash, 0)
+        assertEquals(400_000L, ledger.balance(bpi))
+        assertEquals(220_000L, ledger.balance(gcash))
+    }
+
+    @Test
+    fun transferIsNotIncomeOrSpending() {
+        val bpi = newAccount("BPI", 500_000)
+        val gcash = newAccount("GCash", 0)
+        ledger.logExpense(12_000, category("Meals"), bpi, 10)
+        ledger.logTransfer(100_000, bpi, gcash, 20)
+        val totals = ledger.totals(0, 100)
+        assertEquals(0L, totals.income)
+        assertEquals(12_000L, totals.spent)
+    }
+
+    @Test
+    fun transferToSameAccountIsRejected() {
+        assertFailsWith<IllegalArgumentException> {
+            ledger.logTransfer(5_000, cash(), cash(), 0)
+        }
+    }
+
+    @Test
+    fun incomeRaisesTheAccount() {
+        val salary = ledger.quickCategories("INCOME", 50).first { it.name == "Salary" }.id
+        ledger.logIncome(2_000_000, salary, cash(), 0)
+        assertEquals(2_000_000L, ledger.balance(cash()))
+    }
 }

@@ -1,21 +1,42 @@
 package app.trackching
 
-import app.trackching.db.MostUsed
-import app.trackching.db.TrackchingDatabase
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.trackching.db.Active
 import app.trackching.db.Balances
+import app.trackching.db.MostUsed
+import app.trackching.db.Totals
+import app.trackching.db.TrackchingDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 
 class Ledger(private val db: TrackchingDatabase) {
 
     /** Saves an expense and returns its id, so it can be undone. */
-    fun logExpense(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long): Long {
-        require(centavos > 0) { "An expense must be more than ₱0.00" }
+    fun logExpense(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long): Long =
+        insert("EXPENSE", centavos, accountId, null, categoryId, occurredAt)
+
+    /** Saves income into an account. */
+    fun logIncome(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long): Long =
+        insert("INCOME", centavos, accountId, null, categoryId, occurredAt)
+
+    /** Moves money between two of your own accounts. No category. */
+    fun logTransfer(centavos: Long, fromId: Long, toId: Long, occurredAt: Long): Long {
+        require(fromId != toId) { "From and To must be different accounts" }
+        return insert("TRANSFER", centavos, fromId, toId, null, occurredAt)
+    }
+
+    private fun insert(
+        kind: String,
+        centavos: Long,
+        accountId: Long,
+        toAccountId: Long?,
+        categoryId: Long?,
+        occurredAt: Long,
+    ): Long {
+        require(centavos > 0) { "An amount must be more than ₱0.00" }
         return db.transactionWithResult {
-            db.txnQueries.insert("EXPENSE", centavos, accountId, null, categoryId, occurredAt)
+            db.txnQueries.insert(kind, centavos, accountId, toAccountId, categoryId, occurredAt)
             db.txnQueries.lastId().executeAsOne()
         }
     }
@@ -35,6 +56,9 @@ class Ledger(private val db: TrackchingDatabase) {
             ?: db.accountQueries.active().executeAsList().firstOrNull()?.id
 
     fun balance(accountId: Long): Long = db.accountQueries.balanceOf(accountId).executeAsOne()
+
+    /** Income and spending from `from` (included) to `until` (not included). */
+    fun totals(from: Long, until: Long): Totals = db.txnQueries.totals(from, until).executeAsOne()
 
     /** Accounts you can pay from, in order. */
     fun accounts(): List<Active> = db.accountQueries.active().executeAsList()
