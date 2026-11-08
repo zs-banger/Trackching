@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.TextButton
 
 /** Temporary Home: each account and its balance. The real Home is P1-18. */
 @Composable
@@ -31,9 +32,15 @@ fun HomeScreen(ledger: Ledger) {
     val c = TrackchingTheme.colors
     val balances by remember(ledger) { ledger.balances() }.collectAsState(initial = emptyList())
     var addingAccount by remember { mutableStateOf(false) }
+    var managing by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Tag("Accounts")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { Tag("Accounts") }
+            TextButton(onClick = { managing = true }) {
+                Text("MANAGE", color = c.orangeInk, fontWeight = FontWeight.Bold)
+            }
+        }
         balances.forEach { account ->
             Row(
                 Modifier.fillMaxWidth(),
@@ -62,5 +69,8 @@ fun HomeScreen(ledger: Ledger) {
 
     if (addingAccount) {
         AccountSheet(ledger, onDismiss = { addingAccount = false })
+    }
+    if (managing) {
+        ManageAccountsSheet(ledger, onDismiss = { managing = false })
     }
 }
