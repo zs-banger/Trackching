@@ -25,3 +25,11 @@ SELECT account_id FROM txn
 WHERE kind = 'EXPENSE'
 ORDER BY id DESC
 LIMIT 1;
+
+-- Income and spending between two moments. Transfers are left out on purpose.
+totals:
+SELECT
+    CAST(COALESCE(SUM(CASE WHEN kind = 'INCOME'  THEN centavos END), 0) AS INTEGER) AS income,
+    CAST(COALESCE(SUM(CASE WHEN kind = 'EXPENSE' THEN centavos END), 0) AS INTEGER) AS spent
+FROM txn
+WHERE occurred_at >= ? AND occurred_at < ?;

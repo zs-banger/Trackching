@@ -33,34 +33,48 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
+import app.trackching.db.Active
 
 private const val OneDayMillis = 24L * 60 * 60 * 1000
 
-/** "New transaction" on Expense: type, tap a category, tap SAVE. */
+/** "New transaction": Expense, Income or Transfer. */
 @Composable
-fun ExpenseSheet(
+fun TxnSheet(
     ledger: Ledger,
     onDismiss: () -> Unit,
     onSaved: (txnId: Long) -> Unit,
 ) {
     val c = TrackchingTheme.colors
-    val form = remember { ExpenseForm(ledger.lastAccountUsed()) }
+    val form = remember { TxnForm(ledger.lastAccountUsed()) }
     val accounts = remember { ledger.accounts() }
     var showAll by remember { mutableStateOf(false) }
-    val categories = remember(showAll) { ledger.quickCategories("EXPENSE", if (showAll) 100L else 8L) }
+    val categoryKind = if (form.kind == AmountKind.Income) "INCOME" else "EXPENSE"
+    val categories = remember(showAll, categoryKind) {
+        ledger.quickCategories(categoryKind, if (showAll) 100L else 8L)
+    }
 
     val hint = when {
         form.centavos == 0L -> "Type the amount"
-        form.categoryId == null -> "Pick a category"
+        form.kind == AmountKind.Transfer && accounts.size < 2 -> "Add a second account to transfer"
+        form.kind == AmountKind.Transfer && form.toAccountId == null -> "Pick where it goes"
+        form.kind != AmountKind.Transfer && form.categoryId == null -> "Pick a category"
         else -> ""
     }
 
     TrackchingSheet(title = "New transaction", onDismiss = onDismiss) { close ->
+        SegmentedTabs(
+            options = AmountKind.entries,
+            selected = form.kind,
+            onSelect = { form.selectKind(it); showAll = false },
+            label = { it.name },
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp),
+        )
+
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Amount(form.centavos, AmountKind.Expense, maxFontSize = 40.sp)
+            Amount(form.centavos, form.kind, maxFontSize = 40.sp)
             Text(hint, color = c.ink2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
 
@@ -71,20 +85,32 @@ fun ExpenseSheet(
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Field("Category") {
-                CategoryGrid(
-                    categories = categories,
-                    selected = form.categoryId,
-                    showMore = !showAll,
-                    onPick = { form.categoryId = it },
-                    onMore = { showAll = true },
-                )
+            if (form.kind != AmountKind.Transfer) {
+                Field("Category") {
+                    CategoryGrid(
+                        categories = categories,
+                        selected = form.categoryId,
+                        showMore = !showAll,
+                        onPick = { form.categoryId = it },
+                        onMore = { showAll = true },
+                    )
+                }
             }
-            Field("Paid from") {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    accounts.forEach { account ->
-                        Chip(account.name, selected = account.id == form.accountId, onClick = { form.accountId = account.id })
-                    }
+            val fromLabel = when (form.kind) {
+                AmountKind.Expense -> "Paid from"
+                AmountKind.Income -> "Received into"
+                AmountKind.Transfer -> "From"
+            }
+            Field(fromLabel) {
+                AccountChips(accounts, selected = form.accountId, onPick = { form.accountId = it })
+            }
+            if (form.kind == AmountKind.Transfer) {
+                Field("To") {
+                    AccountChips(
+                        accounts.filter { it.id != form.accountId },
+                        selected = form.toAccountId,
+                        onPick = { form.toAccountId = it },
+                    )
                 }
             }
             Field("Date") {
@@ -99,15 +125,35 @@ fun ExpenseSheet(
             onKey = form::onKey,
             saveEnabled = form.canSave,
             onSave = {
-                val category = form.categoryId
+                val at = if (form.yesterday) nowMillis() - OneDayMillis else nowMillis()
                 val account = form.accountId
-                if (category != null && account != null) {
-                    val at = if (form.yesterday) nowMillis() - OneDayMillis else nowMillis()
-                    onSaved(ledger.logExpense(form.centavos, category, account, at))
+                val category = form.categoryId
+                val to = form.toAccountId
+                val id = when {
+                    account == null -> null
+                    form.kind == AmountKind.Transfer && to != null ->
+                        ledger.logTransfer(form.centavos, account, to, at)
+                    form.kind == AmountKind.Income && category != null ->
+                        ledger.logIncome(form.centavos, category, account, at)
+                    form.kind == AmountKind.Expense && category != null ->
+                        ledger.logExpense(form.centavos, category, account, at)
+                    else -> null
+                }
+                if (id != null) {
+                    onSaved(id)
                     close()
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun AccountChips(accounts: List<Active>, selected: Long?, onPick: (Long) -> Unit) {
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        accounts.forEach { account ->
+            Chip(account.name, selected = account.id == selected, onClick = { onPick(account.id) })
+        }
     }
 }
 
