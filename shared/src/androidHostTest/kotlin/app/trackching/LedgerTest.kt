@@ -226,4 +226,12 @@ class LedgerTest {
     fun lastAccountCannotBeArchived() {
         assertFailsWith<IllegalArgumentException> { ledger.archive(cash()) }
     }
+
+    @Test
+    fun newAccountGoesLast() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        ledger.reorder(listOf(gcash, cash()))
+        ledger.addAccount("Maya", AccountType.EWallet, AccountColors[2], 0)
+        assertEquals("Maya", ledger.accounts().last().name)
+    }
 }
