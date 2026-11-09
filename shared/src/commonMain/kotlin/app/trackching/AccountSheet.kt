@@ -71,6 +71,7 @@ fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
     }
 }
 
+/** Name, type, color and starting balance. Used by New account and by setup. Put it in a Column. */
 @Composable
 fun AccountFields(form: AccountForm) {
     val c = TrackchingTheme.colors

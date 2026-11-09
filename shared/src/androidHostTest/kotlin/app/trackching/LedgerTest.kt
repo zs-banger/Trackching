@@ -23,6 +23,13 @@ class LedgerTest {
 
     private val ledger = Ledger(db)
 
+    private fun cash() = db.accountQueries.active().executeAsList().first().id
+    private fun category(name: String) = ledger.quickCategories("EXPENSE", 50).first { it.name == name }.id
+    private fun main(name: String, kind: String = "EXPENSE") = ledger.mainCategories(kind).first { it.name == name }.id
+
+    private fun categoryOf(txnId: Long) = db.txnQueries.byId(txnId).executeAsOne().category_id
+    private fun names(kind: String) = ledger.quickCategories(kind, 50).map { it.name }
+
     /** A brand-new database, like a fresh install: no accounts, no categories. */
     private fun emptyDb() = JdbcSqliteDriver(
         JdbcSqliteDriver.IN_MEMORY,
@@ -69,14 +76,6 @@ class LedgerTest {
             fresh.finishSetup("Wallet 2", AccountType.Cash, AccountColors.first(), 0, StarterCategories)
         }
     }
-
-    private fun cash() = db.accountQueries.active().executeAsList().first().id
-    private fun category(name: String) = ledger.quickCategories("EXPENSE", 50).first { it.name == name }.id
-
-    private fun main(name: String, kind: String = "EXPENSE") = ledger.mainCategories(kind).first { it.name == name }.id
-
-    private fun categoryOf(txnId: Long) = db.txnQueries.byId(txnId).executeAsOne().category_id
-    private fun names(kind: String) = ledger.quickCategories(kind, 50).map { it.name }
 
     @Test
     fun seedingTwiceAddsNothing() {
@@ -486,6 +485,7 @@ class LedgerTest {
     @Test
     fun textDatesCompareAcrossMonthsAndYears() {
         // Zero-padding is what makes this work: "2026-12-31" < "2027-01-01" as text.
+        // No assert needed: the test passes if the table's CHECK accepts it, and fails if it throws.
         ledger.addEvent("New Year", LocalDate(2026, 12, 31), LocalDate(2027, 1, 1))
     }
 
@@ -572,5 +572,4 @@ class LedgerTest {
         ledger.setAmountsHidden(false)
         assertFalse(ledger.amountsHidden())
     }
-
 }
