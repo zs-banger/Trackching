@@ -11,7 +11,9 @@ import kotlinx.datetime.toLocalDateTime
 
 /** One day in the list: its date, its net, and its transactions (newest first). */
 data class Day(val date: LocalDate, val net: Long, val items: List<History>)
+
 const val ADJUSTMENT = "ADJUSTMENT"
+
 fun kindOf(kind: String): AmountKind = when (kind) {
     "INCOME" -> AmountKind.Income
     "TRANSFER" -> AmountKind.Transfer
