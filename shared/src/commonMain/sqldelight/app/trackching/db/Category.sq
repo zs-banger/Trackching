@@ -58,3 +58,17 @@ ORDER BY sort_order, id;
 
 parentInfo:
 SELECT kind, parent_id FROM category WHERE id = ?;
+
+-- Every category of one kind with its OWN total between two moments.
+-- The date filter sits in the JOIN (not in WHERE) so unused categories still come back, at 0.
+monthTotals:
+SELECT c.id, c.name, c.color, c.icon, c.parent_id,
+       CAST(COALESCE(SUM(t.centavos), 0) AS INTEGER) AS total
+FROM category c
+LEFT JOIN txn t
+       ON t.category_id = c.id
+      AND t.occurred_at >= ?
+      AND t.occurred_at < ?
+WHERE c.kind = ?
+GROUP BY c.id
+ORDER BY c.sort_order, c.id;
