@@ -41,52 +41,7 @@ fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            OutlinedTextField(
-                value = form.name,
-                onValueChange = { form.name = it },
-                label = { Text("Name") },
-                placeholder = { Text("e.g. GCash") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Label("Type")
-            Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                AccountType.entries.forEach { type ->
-                    Chip(type.label, selected = form.type == type, onClick = { form.type = type })
-                }
-            }
-
-            Label("Color")
-            Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AccountColors.forEach { color ->
-                    val selected = form.color == color
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .drawBehind {
-                                if (selected) drawRect(c.ink) // a frame around the picked color
-                            }
-                            .padding(if (selected) 3.dp else 0.dp)
-                            .background(Color(color))
-                            .selectable(selected = selected, onClick = { form.color = color }, role = Role.RadioButton),
-                    )
-                }
-            }
-
-            OutlinedTextField(
-                value = form.starting,
-                onValueChange = { form.starting = it },
-                label = { Text("Starting balance (₱)") },
-                supportingText = { Text("What's in it today. This isn't counted as income.") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Text(form.error ?: "", color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            AccountFields(form)
 
             OffsetBlock(
                 Modifier
@@ -114,6 +69,57 @@ fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun AccountFields(form: AccountForm) {
+    val c = TrackchingTheme.colors
+    OutlinedTextField(
+        value = form.name,
+        onValueChange = { form.name = it },
+        label = { Text("Name") },
+        placeholder = { Text("e.g. GCash") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    Label("Type")
+    Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        AccountType.entries.forEach { type ->
+            Chip(type.label, selected = form.type == type, onClick = { form.type = type })
+        }
+    }
+
+    Label("Color")
+    Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AccountColors.forEach { color ->
+            val selected = form.color == color
+            Box(
+                Modifier
+                    .weight(1f)
+                    .aspectRatio(1f)
+                    .drawBehind {
+                        if (selected) drawRect(c.ink) // a frame around the picked color
+                    }
+                    .padding(if (selected) 3.dp else 0.dp)
+                    .background(Color(color))
+                    .selectable(selected = selected, onClick = { form.color = color }, role = Role.RadioButton),
+            )
+        }
+    }
+
+    OutlinedTextField(
+        value = form.starting,
+        onValueChange = { form.starting = it },
+        label = { Text("Starting balance (₱)") },
+        supportingText = { Text("What's in it today. This isn't counted as income.") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    Text(form.error ?: "", color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable

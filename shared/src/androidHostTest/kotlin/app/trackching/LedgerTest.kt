@@ -23,6 +23,53 @@ class LedgerTest {
 
     private val ledger = Ledger(db)
 
+    /** A brand-new database, like a fresh install: no accounts, no categories. */
+    private fun emptyDb() = JdbcSqliteDriver(
+        JdbcSqliteDriver.IN_MEMORY,
+        Properties().apply { put("foreign_keys", "true") },
+    ).let { driver ->
+        TrackchingDatabase.Schema.create(driver)
+        TrackchingDatabase(driver)
+    }
+
+    @Test
+    fun aFreshInstallNeedsSetup() = assertFalse(Ledger(emptyDb()).setupDone())
+
+    @Test
+    fun anAppWithAccountsCountsAsSetUp() = assertTrue(ledger.setupDone()) // like a phone from before P1-19
+
+    @Test
+    fun finishingSetupSavesOnlyWhatYouTicked() {
+        val fresh = emptyDb()
+        val picked = StarterCategories.filter { it.name == "Food & Beverages" || it.name == "Salary" }
+        Ledger(fresh).finishSetup("Wallet", AccountType.Cash, AccountColors.first(), 50_000, picked)
+
+        val wallet = fresh.accountQueries.active().executeAsList().single()
+        assertEquals("Wallet", wallet.name)
+        assertEquals(50_000L, Ledger(fresh).balance(wallet.id))
+        assertEquals(6L, fresh.categoryQueries.countAll().executeAsOne()) // Food + its 4 subs, and Salary
+        assertTrue(Ledger(fresh).setupDone()) // a new Ledger, same database: like reopening the app
+    }
+
+    @Test
+    fun setupNeedsAnExpenseAndAnIncomeCategory() {
+        val fresh = emptyDb()
+        val onlyFood = StarterCategories.filter { it.name == "Food & Beverages" }
+        assertFailsWith<IllegalArgumentException> {
+            Ledger(fresh).finishSetup("Wallet", AccountType.Cash, AccountColors.first(), 0, onlyFood)
+        }
+        assertEquals(0L, fresh.accountQueries.countAll().executeAsOne()) // nothing half-saved
+    }
+
+    @Test
+    fun setupRunsOnlyOnce() {
+        val fresh = Ledger(emptyDb())
+        fresh.finishSetup("Wallet", AccountType.Cash, AccountColors.first(), 0, StarterCategories)
+        assertFailsWith<IllegalArgumentException> {
+            fresh.finishSetup("Wallet 2", AccountType.Cash, AccountColors.first(), 0, StarterCategories)
+        }
+    }
+
     private fun cash() = db.accountQueries.active().executeAsList().first().id
     private fun category(name: String) = ledger.quickCategories("EXPENSE", 50).first { it.name == name }.id
 
@@ -525,4 +572,5 @@ class LedgerTest {
         ledger.setAmountsHidden(false)
         assertFalse(ledger.amountsHidden())
     }
+
 }

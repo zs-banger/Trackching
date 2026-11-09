@@ -276,4 +276,28 @@ class Ledger(private val db: TrackchingDatabase) {
     fun setAmountsHidden(hidden: Boolean) {
         db.settingQueries.put("amounts_hidden", hidden.toString())
     }
+
+    /** True once setup is finished. An app that already has accounts counts as set up. */
+    fun setupDone(): Boolean =
+        db.settingQueries.get("setup_done").executeAsOneOrNull() == "true" ||
+                db.accountQueries.countAll().executeAsOne() > 0
+
+    /** Setup's last step: the first account, the ticked categories and the "done" flag, all or nothing. */
+    fun finishSetup(
+        account: String,
+        type: AccountType,
+        color: Long,
+        startingCentavos: Long,
+        categories: List<StarterCategory>,
+    ) {
+        require(!setupDone()) { "Setup is already done" }
+        require(categories.any { it.kind == "EXPENSE" } && categories.any { it.kind == "INCOME" }) {
+            "Keep at least one expense and one income category"
+        }
+        db.transaction {
+            addAccount(account, type, color, startingCentavos)
+            db.seedCategories(categories)
+            db.settingQueries.put("setup_done", "true")
+        }
+    }
 }
