@@ -2,6 +2,10 @@ package app.trackching
 
 import app.trackching.db.WithTotals
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 enum class EventStatus { Active, Upcoming, Past }
 
@@ -43,3 +47,8 @@ fun rangeLabel(start: LocalDate, end: LocalDate?): String = when (end) {
     start -> dateLabel(start)
     else -> "${dateLabel(start)} – ${dateLabel(end)}"
 }
+
+/** The calendar day a saved moment falls on, in the given time zone. */
+@OptIn(ExperimentalTime::class)
+fun dayOf(millis: Long, zone: TimeZone): LocalDate =
+    Instant.fromEpochMilliseconds(millis).toLocalDateTime(zone).date

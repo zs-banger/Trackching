@@ -2,6 +2,9 @@ package app.trackching
 
 import app.trackching.db.WithTotals
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -37,5 +40,12 @@ class EventsTest {
         assertEquals("Since Nov 1, 2026", rangeLabel(d(11, 1), null))
         assertEquals("Dec 25, 2026", rangeLabel(d(12, 25), d(12, 25)))
         assertEquals("Dec 20, 2026 – Dec 23, 2026", rangeLabel(d(12, 20), d(12, 23)))
+    }
+
+    @Test
+    fun lateEveningStaysOnItsDay() {
+        // 11:30 PM on Dec 23 in Manila (UTC+8) is still Dec 23 there, even though it's Dec 23 15:30 in UTC.
+        val millis = LocalDateTime(2026, 12, 23, 23, 30).toInstant(TimeZone.of("Asia/Manila")).toEpochMilliseconds()
+        assertEquals(LocalDate(2026, 12, 23), dayOf(millis, TimeZone.of("Asia/Manila")))
     }
 }
