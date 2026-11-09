@@ -31,3 +31,7 @@ fun monthRange(today: LocalDate, zone: TimeZone): Pair<Long, Long> {
     val next = first.plus(1, DateTimeUnit.MONTH)
     return first.atStartOfDayIn(zone).toEpochMilliseconds() to next.atStartOfDayIn(zone).toEpochMilliseconds()
 }
+
+/** True when there are categories, but nothing was logged on any of them in this period. */
+fun nothingLogged(groups: List<CategoryGroup>): Boolean =
+    groups.isNotEmpty() && groups.all { it.total == 0L }
