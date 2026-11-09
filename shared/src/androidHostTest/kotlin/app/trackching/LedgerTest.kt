@@ -441,4 +441,40 @@ class LedgerTest {
         // Zero-padding is what makes this work: "2026-12-31" < "2027-01-01" as text.
         ledger.addEvent("New Year", LocalDate(2026, 12, 31), LocalDate(2027, 1, 1))
     }
+
+    @Test
+    fun eventTotalIsItsTaggedSpending() {
+        val trip = ledger.addEvent("Baguio", LocalDate(2026, 12, 20), LocalDate(2026, 12, 23))
+        val a = ledger.logExpense(50_000, category("Meals"), cash(), 0)
+        val b = ledger.logExpense(20_000, category("Coffee"), cash(), 0)
+        ledger.logExpense(9_900, category("Meals"), cash(), 0) // not tagged
+        ledger.tagEvent(a, trip)
+        ledger.tagEvent(b, trip)
+        val row = db.eventQueries.withTotals().executeAsList().single()
+        assertEquals(70_000L, row.spent)
+    }
+
+    @Test
+    fun eventWithNothingTaggedShowsZero() {
+        ledger.addEvent("Christmas", LocalDate(2026, 12, 24), LocalDate(2026, 12, 25))
+        assertEquals(0L, db.eventQueries.withTotals().executeAsList().single().spent)
+    }
+
+    @Test
+    fun taggedIncomeDoesNotChangeTheTotal() {
+        val trip = ledger.addEvent("Baguio", LocalDate(2026, 12, 20), null)
+        val pay = ledger.logIncome(10_000, ledger.quickCategories("INCOME", 50).first().id, cash(), 0)
+        ledger.tagEvent(pay, trip)
+        assertEquals(0L, db.eventQueries.withTotals().executeAsList().single().spent)
+    }
+
+    @Test
+    fun editingKeepsTheTag() {
+        val trip = ledger.addEvent("Baguio", LocalDate(2026, 12, 20), null)
+        val id = ledger.logExpense(50_000, category("Meals"), cash(), 0)
+        ledger.tagEvent(id, trip)
+        val form = TxnForm.from(ledger.get(id)!!)
+        ledger.update(form.edited(now = 0)!!)
+        assertEquals(trip, ledger.get(id)!!.event_id)
+    }
 }

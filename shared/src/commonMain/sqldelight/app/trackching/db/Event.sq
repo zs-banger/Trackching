@@ -15,3 +15,11 @@ SELECT last_insert_rowid();
 
 byId:
 SELECT * FROM event WHERE id = ?;
+
+-- Every event with what was spent on it. LEFT JOIN so events with nothing tagged show 0.
+withTotals:
+SELECT e.id, e.name, e.start_date, e.end_date,
+       CAST(COALESCE(SUM(CASE WHEN t.kind = 'EXPENSE' THEN t.centavos END), 0) AS INTEGER) AS spent
+FROM event e
+LEFT JOIN txn t ON t.event_id = e.id
+GROUP BY e.id;
