@@ -13,6 +13,7 @@ import app.trackching.db.History
 import app.trackching.db.Txn
 import app.trackching.db.ManageList
 import app.trackching.db.Mains
+import app.trackching.db.MonthTotals
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -194,4 +195,8 @@ class Ledger(private val db: TrackchingDatabase) {
             db.categoryQueries.lastId().executeAsOne()
         }
     }
+
+    /** Every category of `kind` with its own total in [from, until). Re-sent when anything changes. */
+    fun monthTotals(kind: String, from: Long, until: Long): Flow<List<MonthTotals>> =
+        db.categoryQueries.monthTotals(from, until, kind).asFlow().mapToList(Dispatchers.Default)
 }
