@@ -516,4 +516,13 @@ class LedgerTest {
         val id = ledger.logExpense(50_000, category("Meals"), cash(), 0)
         assertEquals(null, ledger.get(id)!!.event_id)
     }
+
+    @Test
+    fun amountsAreShownUntilYouHideThem() {
+        assertFalse(ledger.amountsHidden())
+        ledger.setAmountsHidden(true)
+        assertTrue(Ledger(db).amountsHidden()) // a new Ledger, same database: like restarting the app
+        ledger.setAmountsHidden(false)
+        assertFalse(ledger.amountsHidden())
+    }
 }
