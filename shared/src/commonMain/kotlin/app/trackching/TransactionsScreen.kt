@@ -76,7 +76,7 @@ private fun DayHeader(label: String, net: Long) {
 }
 
 @Composable
-private fun TxnRow(row: History, onClick: () -> Unit) {
+internal fun TxnRow(row: History, onClick: () -> Unit) {
     val c = TrackchingTheme.colors
     val adjustment = row.kind == ADJUSTMENT
     val title = when {

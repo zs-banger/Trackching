@@ -4,7 +4,9 @@ A personal finance tracker. It tracks and gives reports on your spending, income
 credit and IOUs by the day and by event. This will be available as a mobile application for Android.
 A web app version is planned to be developed in the future for iPhones.
 
-This project is a personal side project of mine to practice mobile app development. 
+## About this project
+Trackching is a side project of mine which I built with the purpose of learning and practicing Kotlin and Android mobile development. 
+I run it like a small team project, with planned stories, PR reviews and CI.
 
 ## Project layout
 
