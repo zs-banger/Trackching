@@ -11,7 +11,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -38,7 +39,10 @@ fun TrackchingSheet(
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
 ) {
     val c = TrackchingTheme.colors
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val state = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded), // open fully, never half way
+    )
     val scope = rememberCoroutineScope()
 
     // Slide the sheet down first, then tell the caller it's gone.

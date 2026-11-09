@@ -77,7 +77,7 @@ class Ledger(private val db: TrackchingDatabase) {
         db.transactionWithResult {
             val diff = realCentavos - balance(accountId)
             if (diff == 0L) return@transactionWithResult null
-            db.txnQueries.insert("ADJUSTMENT", diff, accountId, null, null, occurredAt)
+            db.txnQueries.insert(ADJUSTMENT, diff, accountId, null, null, occurredAt)
             db.txnQueries.lastId().executeAsOne()
         }
 

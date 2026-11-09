@@ -119,7 +119,10 @@ private fun MainShell(ledger: Ledger) {
                     Tab.entries.forEach { t ->
                         NavigationBarItem(
                             selected = t == tab,
-                            onClick = { tab = t },
+                            onClick = {
+                                snackbar.currentSnackbarData?.dismiss() // an Undo belongs to the tab it came from
+                                tab = t
+                            },
                             enabled = t.enabled,
                             icon = { Icon(painterResource(t.icon), contentDescription = null) },
                             label = { Text(t.label, fontWeight = FontWeight.Bold) },
@@ -153,8 +156,7 @@ private fun MainShell(ledger: Ledger) {
             snackbarHost = {
                 SnackbarHost(snackbar)
             },
-        )
-        { padding ->
+        ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (tab) {
                     Tab.Home -> HomeScreen(

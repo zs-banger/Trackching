@@ -22,7 +22,8 @@ DELETE FROM txn WHERE id = ?;
 lastId:
 SELECT last_insert_rowid();
 
--- The account of the most recently *entered* expense.
+-- "Paid from" default: the account of the most recently *entered* expense, skipping archived accounts.
+-- By id, not by date: a backdated expense still counts as the last one you entered.
 lastAccountUsed:
 SELECT t.account_id FROM txn t
 JOIN account a ON a.id = t.account_id
