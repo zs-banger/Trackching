@@ -61,11 +61,22 @@ enum class Tab(
     Ious("IOUs", Res.drawable.ic_ious, "New IOU", enabled = false),
 }
 
+/** The app: setup on first launch, the tabs after that. */
 @Composable
 fun AppShell(database: TrackchingDatabase) {
+    val ledger = remember(database) { Ledger(database) }
+    var setupDone by remember(ledger) { mutableStateOf(ledger.setupDone()) }
+    if (setupDone) {
+        MainShell(ledger)
+    } else {
+        SetupScreen(ledger, onDone = { setupDone = true })
+    }
+}
+
+@Composable
+private fun MainShell(ledger: Ledger) {
     val c = TrackchingTheme.colors
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
-    val ledger = remember(database) { Ledger(database) }
     var hidden by remember(ledger) { mutableStateOf(ledger.amountsHidden()) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
