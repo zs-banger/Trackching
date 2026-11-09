@@ -125,4 +125,12 @@ class TxnFormTest {
         assertNull(form.toAccountId)
         assertFalse(form.canSave)
     }
+
+    @Test
+    fun suggestedEventIsUsedUnlessTurnedOff() {
+        val form = TxnForm(accountId = 1)
+        assertEquals(42L, form.eventFor(42))
+        form.tagOff = true
+        assertEquals(null, form.eventFor(42))
+    }
 }
