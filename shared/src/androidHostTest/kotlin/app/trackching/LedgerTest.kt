@@ -24,6 +24,8 @@ class LedgerTest {
 
     private fun cash() = db.accountQueries.active().executeAsList().first().id
     private fun category(name: String) = ledger.quickCategories("EXPENSE", 50).first { it.name == name }.id
+
+    private fun main(name: String, kind: String = "EXPENSE") = ledger.mainCategories(kind).first { it.name == name }.id
     private fun names(kind: String) = ledger.quickCategories(kind, 50).map { it.name }
 
     @Test
@@ -286,5 +288,46 @@ class LedgerTest {
         val gcash = newAccount("GCash", 100_000)
         assertEquals(null, ledger.adjust(gcash, 100_000, 0))
         assertEquals(0, db.txnQueries.history().executeAsList().size)
+    }
+
+    @Test
+    fun newSubcategoryCanBeLoggedAgainst() {
+        val health = ledger.addCategory("Health", "EXPENSE", null, CategoryColors[0], "💊")
+        ledger.addCategory("Medicine", "EXPENSE", health, CategoryColors[0], "💊")
+        val pickable = names("EXPENSE")
+        assertTrue("Medicine" in pickable)
+        assertFalse("Health" in pickable) // it has a subcategory now, so you log against that
+    }
+
+    @Test
+    fun sameNameUnderSameParentIsRejected() {
+        assertFailsWith<IllegalArgumentException> {
+            ledger.addCategory("meals", "EXPENSE", main("Food & Beverages"), CategoryColors[0], "🍔")
+        }
+    }
+
+    @Test
+    fun sameNameUnderAnotherParentIsAllowed() {
+        ledger.addCategory("Meals", "EXPENSE", main("Transportation"), CategoryColors[0], "🍔")
+    }
+
+    @Test
+    fun subcategoryOfASubcategoryIsRejected() {
+        assertFailsWith<IllegalArgumentException> {
+            ledger.addCategory("Spicy", "EXPENSE", category("Meals"), CategoryColors[0], "🍔")
+        }
+    }
+
+    @Test
+    fun subcategoryMustMatchItsMainsKind() {
+        assertFailsWith<IllegalArgumentException> {
+            ledger.addCategory("Bonus", "EXPENSE", main("Salary", "INCOME"), CategoryColors[0], "💰")
+        }
+    }
+
+    @Test
+    fun databaseAlsoBlocksDuplicateMains() {
+        // Skips Ledger on purpose: proves the unique index works on its own, even with NULL parents.
+        assertFails { db.categoryQueries.create("TRANSPORTATION", "EXPENSE", null, CategoryColors[0], "🚌") }
     }
 }

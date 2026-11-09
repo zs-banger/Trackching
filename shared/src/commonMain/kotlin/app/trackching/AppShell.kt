@@ -61,6 +61,7 @@ fun AppShell(database: TrackchingDatabase) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(false) }
+    var addingCategory by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Txn?>(null) }
 
     // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.
@@ -92,7 +93,11 @@ fun AppShell(database: TrackchingDatabase) {
             // What it opens per tab is wired up in P1-4, P1-8, P1-11 and P1-14.
             OffsetBlock(
                 Modifier.clickable(role = Role.Button) {
-                    if (tab == Tab.Home || tab == Tab.Transactions) adding = true
+                    when (tab) {
+                        Tab.Home, Tab.Transactions -> adding = true
+                        Tab.Categories -> addingCategory = true
+                        else -> {}
+                    }
                 },
                 color = c.blue,
                 edge = c.orange,
@@ -125,6 +130,9 @@ fun AppShell(database: TrackchingDatabase) {
                 onDismiss = { adding = false },
                 onSaved = { id -> showUndo("Saved") { ledger.undo(id) } },
             )
+        }
+        if (addingCategory) {
+            CategorySheet(ledger, onDismiss = { addingCategory = false })
         }
         val toEdit = editing
         if (toEdit != null) {
