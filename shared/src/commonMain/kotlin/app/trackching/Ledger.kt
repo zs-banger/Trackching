@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import app.trackching.db.History
 import app.trackching.db.Txn
 import app.trackching.db.ManageList
+import app.trackching.db.Mains
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -167,5 +168,30 @@ class Ledger(private val db: TrackchingDatabase) {
 
     fun restoreAccount(accountId: Long) {
         db.accountQueries.setArchived(0, accountId)
+    }
+
+    /** Main categories of one kind, for the "Under" picker. */
+    fun mainCategories(kind: String): List<Mains> = db.categoryQueries.mains(kind).executeAsList()
+
+    /** Names already used under one parent (null = main categories), in lowercase. */
+    fun categoryNames(kind: String, parentId: Long?): Set<String> =
+        db.categoryQueries.namesUnder(kind, parentId).executeAsList().map { it.lowercase() }.toSet()
+
+    /** Adds a main category (parentId = null) or a subcategory. Returns its id. */
+    fun addCategory(name: String, kind: String, parentId: Long?, color: Long, icon: String): Long {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "A category needs a name" }
+        return db.transactionWithResult {
+            if (parentId != null) {
+                val parent = db.categoryQueries.parentInfo(parentId).executeAsOne()
+                require(parent.parent_id == null) { "A subcategory can only go under a main category" }
+                require(parent.kind == kind) { "A subcategory must be the same kind as its main category" }
+            }
+            require(db.categoryQueries.nameTaken(kind, parentId, clean).executeAsOne() == 0L) {
+                "$clean already exists there"
+            }
+            db.categoryQueries.create(clean, kind, parentId, color, icon)
+            db.categoryQueries.lastId().executeAsOne()
+        }
     }
 }
