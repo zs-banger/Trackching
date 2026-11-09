@@ -121,6 +121,7 @@ fun AppShell(database: TrackchingDatabase) {
                     snackbar.currentSnackbarData?.dismiss()
                     editing = ledger.get(id)
                 })
+                Tab.Categories -> CategoriesScreen(ledger)
                 else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
             }
         }
