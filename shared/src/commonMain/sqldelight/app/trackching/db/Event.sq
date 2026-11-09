@@ -1,0 +1,17 @@
+-- Dates are 'YYYY-MM-DD' text: zero-padded, so comparing text compares dates.
+CREATE TABLE event (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+    start_date TEXT NOT NULL,
+    end_date TEXT, -- NULL = ongoing, no end yet
+    CHECK (end_date IS NULL OR end_date >= start_date)
+);
+
+insert:
+INSERT INTO event(name, start_date, end_date) VALUES (?, ?, ?);
+
+lastId:
+SELECT last_insert_rowid();
+
+byId:
+SELECT * FROM event WHERE id = ?;
