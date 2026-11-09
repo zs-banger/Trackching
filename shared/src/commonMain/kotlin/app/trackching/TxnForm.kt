@@ -26,6 +26,12 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
     /** The event the transaction was tagged to, kept as-is when editing. */
     var eventId: Long? = null
 
+    /** True after tapping "No event": save without the suggested tag. */
+    var tagOff by mutableStateOf(false)
+
+    /** The event to save with: the suggestion, unless you turned it off. */
+    fun eventFor(suggested: Long?): Long? = if (tagOff) null else suggested
+
     val centavos: Long get() = parseCentavos(typed) ?: 0L
 
     /** Transfers need two different accounts; the others need a category. */
