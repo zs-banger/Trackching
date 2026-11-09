@@ -9,6 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertFails
 import java.util.Properties
+import kotlinx.datetime.LocalDate
 
 class LedgerTest {
 
@@ -405,5 +406,39 @@ class LedgerTest {
         // Skips Ledger on purpose: the foreign key alone blocks it.
         ledger.logExpense(5_000, category("Meals"), cash(), 0)
         assertFails { db.categoryQueries.deleteOne(category("Meals")) }
+    }
+
+    @Test
+    fun eventIsSavedWithItsDates() {
+        val id = ledger.addEvent("  Baguio trip ", LocalDate(2026, 12, 20), LocalDate(2026, 12, 23))
+        val e = db.eventQueries.byId(id).executeAsOne()
+        assertEquals("Baguio trip", e.name)
+        assertEquals("2026-12-20", e.start_date)
+        assertEquals("2026-12-23", e.end_date)
+    }
+
+    @Test
+    fun eventWithoutAnEndIsFine() {
+        val id = ledger.addEvent("Laptop fund", LocalDate(2026, 11, 1), null)
+        assertEquals(null, db.eventQueries.byId(id).executeAsOne().end_date)
+    }
+
+    @Test
+    fun eventEndingBeforeItStartsIsRejected() {
+        assertFailsWith<IllegalArgumentException> {
+            ledger.addEvent("Oops", LocalDate(2026, 12, 23), LocalDate(2026, 12, 20))
+        }
+    }
+
+    @Test
+    fun databaseAlsoRejectsEndBeforeStart() {
+        // Skips Ledger on purpose: the table's CHECK alone blocks it.
+        assertFails { db.eventQueries.insert("Oops", "2026-12-23", "2026-12-20") }
+    }
+
+    @Test
+    fun textDatesCompareAcrossMonthsAndYears() {
+        // Zero-padding is what makes this work: "2026-12-31" < "2027-01-01" as text.
+        ledger.addEvent("New Year", LocalDate(2026, 12, 31), LocalDate(2027, 1, 1))
     }
 }
