@@ -62,6 +62,7 @@ fun AppShell(database: TrackchingDatabase) {
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(false) }
     var addingCategory by remember { mutableStateOf(false) }
+    var addingEvent by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Txn?>(null) }
 
     // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.
@@ -96,6 +97,7 @@ fun AppShell(database: TrackchingDatabase) {
                     when (tab) {
                         Tab.Home, Tab.Transactions -> adding = true
                         Tab.Categories -> addingCategory = true
+                        Tab.Events -> addingEvent = true
                         else -> {}
                     }
                 },
@@ -121,8 +123,10 @@ fun AppShell(database: TrackchingDatabase) {
                     snackbar.currentSnackbarData?.dismiss()
                     editing = ledger.get(id)
                 })
+
                 Tab.Categories -> CategoriesScreen(ledger)
                 else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
+
             }
         }
         if (adding) {
@@ -134,6 +138,13 @@ fun AppShell(database: TrackchingDatabase) {
         }
         if (addingCategory) {
             CategorySheet(ledger, onDismiss = { addingCategory = false })
+        }
+        if (addingEvent) {
+            EventSheet(
+                ledger,
+                onDismiss = { addingEvent = false },
+                onSaved = { scope.launch { snackbar.showSnackbar("Event saved") } },
+            )
         }
         val toEdit = editing
         if (toEdit != null) {
