@@ -477,4 +477,43 @@ class LedgerTest {
         ledger.update(form.edited(now = 0)!!)
         assertEquals(trip, ledger.get(id)!!.event_id)
     }
+
+    private fun d(m: Int, day: Int) = LocalDate(2026, m, day)
+
+    @Test
+    fun activeEventCoversItsWholeRange() {
+        val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        assertEquals(null, ledger.activeEventOn(d(12, 19)))
+        assertEquals(trip, ledger.activeEventOn(d(12, 20))?.id)  // start day
+        assertEquals(trip, ledger.activeEventOn(d(12, 23))?.id)  // end day
+        assertEquals(null, ledger.activeEventOn(d(12, 24)))
+    }
+
+    @Test
+    fun ongoingEventStaysActive() {
+        val fund = ledger.addEvent("Laptop fund", d(11, 1), null)
+        assertEquals(fund, ledger.activeEventOn(d(12, 31))?.id)
+    }
+
+    @Test
+    fun newestOverlappingEventWins() {
+        ledger.addEvent("Laptop fund", d(11, 1), null)
+        val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        assertEquals(trip, ledger.activeEventOn(d(12, 21))?.id)
+    }
+
+    @Test
+    fun loggingWithAnEventTagsIt() {
+        val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        val id = ledger.logExpense(50_000, category("Meals"), cash(), 0, eventId = trip)
+        assertEquals(trip, ledger.get(id)!!.event_id)
+        assertEquals(50_000L, db.eventQueries.withTotals().executeAsList().single().spent)
+    }
+
+    @Test
+    fun loggingWithoutAnEventLeavesItUntagged() {
+        ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        val id = ledger.logExpense(50_000, category("Meals"), cash(), 0)
+        assertEquals(null, ledger.get(id)!!.event_id)
+    }
 }

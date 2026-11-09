@@ -17,6 +17,7 @@ import app.trackching.db.MonthTotals
 import app.trackching.db.Leaves
 import kotlinx.datetime.LocalDate
 import app.trackching.db.WithTotals
+import app.trackching.db.ActiveOn
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -41,11 +42,14 @@ class Ledger(private val db: TrackchingDatabase) {
         toAccountId: Long?,
         categoryId: Long?,
         occurredAt: Long,
+        eventId: Long? = null
     ): Long {
         require(centavos > 0) { "An amount must be more than ₱0.00" }
         return db.transactionWithResult {
             db.txnQueries.insert(kind, centavos, accountId, toAccountId, categoryId, occurredAt)
-            db.txnQueries.lastId().executeAsOne()
+            val id = db.txnQueries.lastId().executeAsOne()
+            if (eventId != null) db.txnQueries.setEvent(eventId, id)
+            id
         }
     }
 
@@ -260,4 +264,14 @@ class Ledger(private val db: TrackchingDatabase) {
     fun tagEvent(txnId: Long, eventId: Long?) {
         db.txnQueries.setEvent(eventId, txnId)
     }
+
+    /** The event a transaction on `day` should be tagged to, or null. */
+    fun activeEventOn(day: LocalDate): ActiveOn? =
+        db.eventQueries.activeOn(day.toString()).executeAsOneOrNull()
+
+    fun logExpense(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long, eventId: Long? = null): Long =
+        insert("EXPENSE", centavos, accountId, null, categoryId, occurredAt, eventId)
+
+    fun logIncome(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long, eventId: Long? = null): Long =
+        insert("INCOME", centavos, accountId, null, categoryId, occurredAt, eventId)
 }

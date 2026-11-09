@@ -58,6 +58,11 @@ fun TxnSheet(
     val categories = remember(showAll, categoryKind) {
         ledger.quickCategories(categoryKind, if (showAll) 100L else 8L)
     }
+    // Which event this transaction falls in, by its date. Only for new expenses and income.
+    val zone = remember { TimeZone.currentSystemDefault() }
+    val suggested = remember(form.date) {
+        if (editing != null) null else ledger.activeEventOn(dayOf(form.occurredAt(nowMillis()), zone))
+    }
 
     val hint = when {
         form.centavos == 0L -> "Type the amount"
@@ -123,6 +128,11 @@ fun TxnSheet(
             Field(fromLabel) {
                 AccountChips(accounts, selected = form.accountId, onPick = { form.pickFrom(it) })
             }
+            // Which event this transaction falls in, by its date. Only for new expenses and income.
+            val zone = remember { TimeZone.currentSystemDefault() }
+            val suggested = remember(form.date) {
+                if (editing != null) null else ledger.activeEventOn(dayOf(form.occurredAt(nowMillis()), zone))
+            }
             if (form.kind == AmountKind.Transfer) {
                 Field("To") {
                     AccountChips(
@@ -173,6 +183,10 @@ fun TxnSheet(
                         ledger.logIncome(form.centavos, category, account, at)
                     form.kind == AmountKind.Expense && category != null ->
                         ledger.logExpense(form.centavos, category, account, at)
+                    form.kind == AmountKind.Income && category != null ->
+                        ledger.logIncome(form.centavos, category, account, at, form.eventFor(suggested?.id))
+                    form.kind == AmountKind.Expense && category != null ->
+                        ledger.logExpense(form.centavos, category, account, at, form.eventFor(suggested?.id))
                     else -> null
                 }
                 if (id != null) {

@@ -23,3 +23,11 @@ SELECT e.id, e.name, e.start_date, e.end_date,
 FROM event e
 LEFT JOIN txn t ON t.event_id = e.id
 GROUP BY e.id;
+
+-- The event covering one day ('YYYY-MM-DD'). Start and end days count; no end = ongoing.
+-- If several overlap, the most recently started wins.
+activeOn:
+SELECT id, name FROM event
+WHERE start_date <= :day AND (end_date IS NULL OR end_date >= :day)
+ORDER BY start_date DESC, id DESC
+LIMIT 1;
