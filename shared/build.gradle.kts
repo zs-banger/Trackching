@@ -53,8 +53,7 @@ kotlin {
             implementation(libs.androidx.testRunner)
         }
         getByName("androidHostTest").dependencies {
-            implementation("app.cash.sqldelight:sqlite-driver:2.4.1")
-        }
+            implementation(libs.sqldelight.sqlite.driver)        }
     }
 }
 
