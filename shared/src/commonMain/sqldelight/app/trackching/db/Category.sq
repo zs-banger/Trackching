@@ -72,3 +72,27 @@ LEFT JOIN txn t
 WHERE c.kind = ?
 GROUP BY c.id
 ORDER BY c.sort_order, c.id;
+
+categoryById:
+SELECT * FROM category WHERE id = ?;
+
+subIds:
+SELECT id FROM category WHERE parent_id = ?;
+
+-- Categories you can log against (no subcategories), for "Move transactions to".
+leaves:
+SELECT c.id, c.name, p.name AS parent_name
+FROM category c
+LEFT JOIN category p ON p.id = c.parent_id
+WHERE c.kind = ?
+  AND NOT EXISTS (SELECT 1 FROM category k WHERE k.parent_id = c.id)
+ORDER BY c.sort_order, c.id;
+
+countOthersOfKind:
+SELECT COUNT(*) FROM category WHERE kind = ? AND id NOT IN ?;
+
+deleteSubs:
+DELETE FROM category WHERE parent_id = ?;
+
+deleteOne:
+DELETE FROM category WHERE id = ?;

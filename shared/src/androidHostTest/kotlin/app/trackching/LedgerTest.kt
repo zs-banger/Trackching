@@ -26,6 +26,8 @@ class LedgerTest {
     private fun category(name: String) = ledger.quickCategories("EXPENSE", 50).first { it.name == name }.id
 
     private fun main(name: String, kind: String = "EXPENSE") = ledger.mainCategories(kind).first { it.name == name }.id
+
+    private fun categoryOf(txnId: Long) = db.txnQueries.byId(txnId).executeAsOne().category_id
     private fun names(kind: String) = ledger.quickCategories(kind, 50).map { it.name }
 
     @Test
@@ -339,5 +341,69 @@ class LedgerTest {
         assertEquals(12_000L, rows.first { it.name == "Meals" }.total)
         assertEquals(0L, rows.first { it.name == "Coffee" }.total)
         assertEquals(db.categoryQueries.mains("EXPENSE").executeAsList().size + 7, rows.size)
+    }
+
+    @Test
+    fun unusedCategoryDeletesStraightAway() {
+        ledger.deleteCategory(category("Snacks"), moveTo = null)
+        assertFalse("Snacks" in names("EXPENSE"))
+    }
+
+    @Test
+    fun usedCategoryNeedsSomewhereToGo() {
+        ledger.logExpense(5_000, category("Meals"), cash(), 0)
+        assertFailsWith<IllegalArgumentException> { ledger.deleteCategory(category("Meals"), moveTo = null) }
+    }
+
+    @Test
+    fun mergeMovesEveryTransaction() {
+        val meals = category("Meals")
+        val coffee = category("Coffee")
+        val a = ledger.logExpense(5_000, meals, cash(), 0)
+        val b = ledger.logExpense(7_000, meals, cash(), 0)
+        ledger.deleteCategory(meals, moveTo = coffee)
+        assertEquals(coffee, categoryOf(a))
+        assertEquals(coffee, categoryOf(b))
+        assertEquals(-12_000L, ledger.balance(cash())) // money doesn't change, only the label
+    }
+
+    @Test
+    fun deletingAMainTakesItsSubsAndTheirTransactions() {
+        val txn = ledger.logExpense(5_000, category("Meals"), cash(), 0)
+        val jeep = category("Jeep & Bus")
+        ledger.deleteCategory(main("Food & Beverages"), moveTo = jeep)
+        assertEquals(jeep, categoryOf(txn))
+        assertTrue(names("EXPENSE").none { it in listOf("Meals", "Coffee", "Snacks", "Groceries") })
+    }
+
+    @Test
+    fun cannotMoveIntoItsOwnSubcategory() {
+        ledger.logExpense(5_000, category("Meals"), cash(), 0)
+        assertFailsWith<IllegalArgumentException> {
+            ledger.deleteCategory(main("Food & Beverages"), moveTo = category("Meals"))
+        }
+    }
+
+    @Test
+    fun cannotMoveIntoTheOtherKind() {
+        ledger.logExpense(5_000, category("Meals"), cash(), 0)
+        assertFailsWith<IllegalArgumentException> {
+            ledger.deleteCategory(category("Meals"), moveTo = main("Salary", "INCOME"))
+        }
+    }
+
+    @Test
+    fun moveTargetsLeaveOutItselfAndItsSubs() {
+        val targets = ledger.moveTargets(main("Food & Beverages")).map { it.name }
+        assertTrue("Jeep & Bus" in targets)
+        assertTrue(targets.none { it in listOf("Food & Beverages", "Meals", "Coffee") })
+        assertTrue("Salary" !in targets)
+    }
+
+    @Test
+    fun databaseRefusesToOrphanTransactions() {
+        // Skips Ledger on purpose: the foreign key alone blocks it.
+        ledger.logExpense(5_000, category("Meals"), cash(), 0)
+        assertFails { db.categoryQueries.deleteOne(category("Meals")) }
     }
 }
