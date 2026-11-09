@@ -92,6 +92,8 @@ fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clickable(enabled = form.canSave && !saved, role = Role.Button, onClick = {
+                        if (saved) return@clickable
+                        saved = true
                         val type = form.type
                         val starting = form.startingCentavos
                         if (type != null && starting != null) {

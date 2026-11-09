@@ -13,7 +13,7 @@ class BalanceTest {
         JdbcSqliteDriver.IN_MEMORY,
         Properties().apply { put("foreign_keys", "true") },
     ).let { driver ->
-    TrackchingDatabase.Schema.create(driver)
+        TrackchingDatabase.Schema.create(driver)
         TrackchingDatabase(driver)
     }
 
