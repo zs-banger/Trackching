@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -84,7 +85,8 @@ private fun ReorderableAccounts(
 ) {
     val c = TrackchingTheme.colors
     // A local copy we can shuffle while dragging; it resets whenever the database sends a new list.
-    var list by remember(accounts) { mutableStateOf(accounts) }
+    var list by remember { mutableStateOf(accounts) }
+    LaunchedEffect(accounts) { list = accounts }
     var draggingId by remember { mutableStateOf<Long?>(null) }
     var offset by remember { mutableFloatStateOf(0f) }
     val rowPx = with(LocalDensity.current) { RowHeight.toPx() }

@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import app.trackching.db.Txn
+import kotlin.test.assertNull
 
 class TxnFormTest {
 
@@ -113,5 +114,15 @@ class TxnFormTest {
     @Test
     fun newFormIsNotAnEdit() {
         assertEquals(null, TxnForm(accountId = 1).edited(now = 0))
+    }
+
+    @Test
+    fun pickingToAsFromClearsTo() {
+        val form = TxnForm(accountId = 1L)
+        form.selectKind(AmountKind.Transfer)
+        form.toAccountId = 2L
+        form.pickFrom(2L)
+        assertNull(form.toAccountId)
+        assertFalse(form.canSave)
     }
 }
