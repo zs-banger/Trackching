@@ -7,6 +7,8 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.ExperimentalTime
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class CategoryTotalsTest {
 
@@ -52,5 +54,22 @@ class CategoryTotalsTest {
         val (from, until) = monthRange(LocalDate(2026, 12, 15), TimeZone.UTC)
         assertEquals(LocalDate(2026, 12, 1).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds(), from)
         assertEquals(LocalDate(2027, 1, 1).atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds(), until)
+    }
+
+    @Test
+    fun nothingLoggedWhenEveryTotalIsZero() {
+        val quiet = rows.map { row(it.id, it.name, it.parent_id, 0) }
+        assertTrue(nothingLogged(groupCategories(quiet)))
+    }
+
+    @Test
+    fun oneAmountMeansSomethingWasLogged() {
+        assertFalse(nothingLogged(groupCategories(rows)))
+    }
+
+    @Test
+    fun anEmptyListIsNotNothingLogged() {
+        // Still loading from the database: don't flash the message.
+        assertFalse(nothingLogged(emptyList()))
     }
 }
