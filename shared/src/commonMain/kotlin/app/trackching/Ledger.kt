@@ -21,13 +21,13 @@ import app.trackching.db.ActiveOn
 
 class Ledger(private val db: TrackchingDatabase) {
 
-    /** Saves an expense and returns its id, so it can be undone. */
-    fun logExpense(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long): Long =
-        insert("EXPENSE", centavos, accountId, null, categoryId, occurredAt)
+    /** Saves an expense and returns its id, so it can be undone. Tags it to an event if given. */
+    fun logExpense(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long, eventId: Long? = null): Long =
+        insert("EXPENSE", centavos, accountId, null, categoryId, occurredAt, eventId)
 
-    /** Saves income into an account. */
-    fun logIncome(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long): Long =
-        insert("INCOME", centavos, accountId, null, categoryId, occurredAt)
+    /** Saves income into an account. Tags it to an event if given. */
+    fun logIncome(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long, eventId: Long? = null): Long =
+        insert("INCOME", centavos, accountId, null, categoryId, occurredAt, eventId)
 
     /** Moves money between two of your own accounts. No category. */
     fun logTransfer(centavos: Long, fromId: Long, toId: Long, occurredAt: Long): Long {
@@ -268,10 +268,4 @@ class Ledger(private val db: TrackchingDatabase) {
     /** The event a transaction on `day` should be tagged to, or null. */
     fun activeEventOn(day: LocalDate): ActiveOn? =
         db.eventQueries.activeOn(day.toString()).executeAsOneOrNull()
-
-    fun logExpense(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long, eventId: Long? = null): Long =
-        insert("EXPENSE", centavos, accountId, null, categoryId, occurredAt, eventId)
-
-    fun logIncome(centavos: Long, categoryId: Long, accountId: Long, occurredAt: Long, eventId: Long? = null): Long =
-        insert("INCOME", centavos, accountId, null, categoryId, occurredAt, eventId)
 }

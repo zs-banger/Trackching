@@ -183,10 +183,6 @@ fun TxnSheet(
                     form.kind == AmountKind.Transfer && to != null ->
                         ledger.logTransfer(form.centavos, account, to, at)
                     form.kind == AmountKind.Income && category != null ->
-                        ledger.logIncome(form.centavos, category, account, at)
-                    form.kind == AmountKind.Expense && category != null ->
-                        ledger.logExpense(form.centavos, category, account, at)
-                    form.kind == AmountKind.Income && category != null ->
                         ledger.logIncome(form.centavos, category, account, at, form.eventFor(suggested?.id))
                     form.kind == AmountKind.Expense && category != null ->
                         ledger.logExpense(form.centavos, category, account, at, form.eventFor(suggested?.id))
