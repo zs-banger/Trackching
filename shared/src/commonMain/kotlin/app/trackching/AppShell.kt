@@ -146,7 +146,7 @@ fun AppShell(database: TrackchingDatabase) {
         { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (tab) {
-                    Tab.Home -> HomeScreen(ledger)
+                    Tab.Home -> HomeScreen(ledger, onOpen = { tab = it })
                     Tab.Transactions -> TransactionsScreen(ledger, onOpen = { id ->
                         snackbar.currentSnackbarData?.dismiss()
                         editing = ledger.get(id)
