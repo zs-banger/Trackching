@@ -16,6 +16,7 @@ import app.trackching.db.Mains
 import app.trackching.db.MonthTotals
 import app.trackching.db.Leaves
 import kotlinx.datetime.LocalDate
+import app.trackching.db.WithTotals
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -249,5 +250,14 @@ class Ledger(private val db: TrackchingDatabase) {
             db.eventQueries.insert(clean, start.toString(), end?.toString())
             db.eventQueries.lastId().executeAsOne()
         }
+    }
+
+    /** Every event with its spending. Re-sent when an event or a transaction changes. */
+    fun eventsWithTotals(): Flow<List<WithTotals>> =
+        db.eventQueries.withTotals().asFlow().mapToList(Dispatchers.Default)
+
+    /** Tags a transaction to an event, or clears the tag with null. (The screen uses this in P1-16.) */
+    fun tagEvent(txnId: Long, eventId: Long?) {
+        db.txnQueries.setEvent(eventId, txnId)
     }
 }

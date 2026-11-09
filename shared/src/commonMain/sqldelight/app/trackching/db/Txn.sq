@@ -5,7 +5,8 @@ CREATE TABLE txn (
     account_id INTEGER NOT NULL REFERENCES account(id),
     to_account_id INTEGER REFERENCES account(id),
     category_id INTEGER REFERENCES category(id), -- NULL for transfers
-    occurred_at INTEGER NOT NULL
+    occurred_at INTEGER NOT NULL,
+    event_id INTEGER REFERENCES event(id) -- NULL = not part of an event
 );
 
 -- Makes "newest first" fast even with thousands of rows.
@@ -66,3 +67,6 @@ SELECT COUNT(*) FROM txn WHERE category_id IN ?;
 
 moveCategory:
 UPDATE txn SET category_id = ? WHERE category_id IN ?;
+
+setEvent:
+UPDATE txn SET event_id = ? WHERE id = ?;

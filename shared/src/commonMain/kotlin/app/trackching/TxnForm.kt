@@ -23,6 +23,9 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
     var originalAt: Long? = null
         private set
 
+    /** The event the transaction was tagged to, kept as-is when editing. */
+    var eventId: Long? = null
+
     val centavos: Long get() = parseCentavos(typed) ?: 0L
 
     /** Transfers need two different accounts; the others need a category. */
@@ -69,6 +72,7 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
             to_account_id = if (transfer) toAccountId else null,
             category_id = if (transfer) null else categoryId,
             occurred_at = occurredAt(now),
+            event_id = eventId,
         )
     }
 
@@ -81,6 +85,7 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
             toAccountId = txn.to_account_id
             originalAt = txn.occurred_at
             date = DateChoice.Original
+            eventId = txn.event_id
         }
     }
 }
