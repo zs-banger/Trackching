@@ -30,16 +30,15 @@ import kotlinx.datetime.todayIn
 /** Events split into Active, Upcoming and Past, each with what was spent. */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun EventsScreen(ledger: Ledger) {
+fun EventsScreen(ledger: Ledger, onNewEvent: () -> Unit) {
     val c = TrackchingTheme.colors
-    val rows by remember(ledger) { ledger.eventsWithTotals() }.collectAsState(initial = emptyList())
+    val loaded by remember(ledger) { ledger.eventsWithTotals() }.collectAsState(initial = null)
+    val rows = loaded ?: return // still loading
     val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
     val sections = remember(rows, today) { splitEvents(rows, today) }
 
     if (rows.isEmpty()) {
-        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            Text("No events yet. Tap + to plan a trip or an occasion.", color = c.ink2, fontSize = 15.sp)
-        }
+        EmptyScreen("No events yet. Group spending for a trip, a birthday or a big purchase.", "New event", onNewEvent)
         return
     }
 

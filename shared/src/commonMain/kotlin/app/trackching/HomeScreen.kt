@@ -37,8 +37,7 @@ import kotlinx.datetime.todayIn
 /** Home: balance and accounts, active events, top categories, today. Each section links to its tab. */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit) {
-    val c = TrackchingTheme.colors
+fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEvent: () -> Unit) {    val c = TrackchingTheme.colors
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
     val (monthFrom, monthUntil) = remember(today) { monthRange(today, zone) }
@@ -94,8 +93,7 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit) {
         // 2. EVENTS
         Section("Events", onOpen = { onOpen(Tab.Events) }) {
             if (active.isEmpty()) {
-                Quiet("No active event")
-            }
+                EmptyState("No active event", "New event", onNewEvent)            }
             active.forEach { event ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(event.name, Modifier.weight(1f), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -107,8 +105,7 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit) {
         // 3. TOP CATEGORIES (bars relative to the biggest)
         Section("Top categories", onOpen = { onOpen(Tab.Categories) }) {
             if (top.isEmpty()) {
-                Quiet("No spending this month yet")
-            }
+                EmptyState("No spending this month yet", "Log an expense", onLog)            }
             val biggest = top.firstOrNull()?.total ?: 0L
             top.forEach { group ->
                 Bar(
@@ -128,8 +125,7 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit) {
         // 4. TODAY
         Section("Today", onOpen = { onOpen(Tab.Transactions) }) {
             if (todays.isEmpty()) {
-                Quiet("Nothing logged today")
-            }
+                EmptyState("Nothing logged today", "Log one", onLog)            }
             todays.forEach { row ->
                 TxnRow(row, onClick = { onOpen(Tab.Transactions) })
             }
@@ -157,10 +153,4 @@ private fun Section(title: String, onOpen: () -> Unit, content: @Composable Colu
         }
         content()
     }
-}
-
-/** A short grey line for an empty section. */
-@Composable
-private fun Quiet(text: String) {
-    Text(text, color = TrackchingTheme.colors.ink2, fontSize = 15.sp)
 }
