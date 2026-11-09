@@ -49,4 +49,13 @@ class DayGroupsTest {
         assertEquals("Yesterday", dayLabel(LocalDate(2026, 11, 7), today))
         assertEquals("Tue, Nov 3", dayLabel(LocalDate(2026, 11, 3), today))
     }
+
+    @Test
+    fun adjustmentsAreLeftOutOfTheNet() {
+        val rows = listOf(
+            row(2, "ADJUSTMENT", -5_000, 2 * hour),
+            row(1, "EXPENSE", 12_000, hour),
+        )
+        assertEquals(-12_000L, groupByDay(rows, TimeZone.UTC).single().net)
+    }
 }

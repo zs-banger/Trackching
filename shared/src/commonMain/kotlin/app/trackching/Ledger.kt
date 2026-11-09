@@ -60,6 +60,18 @@ class Ledger(private val db: TrackchingDatabase) {
 
     fun balance(accountId: Long): Long = db.accountQueries.balanceOf(accountId).executeAsOne()
 
+    /**
+     * Makes the account show `realCentavos` by saving the difference as an Adjustment.
+     * Returns the new id, or null if the balance was already right.
+     */
+    fun adjust(accountId: Long, realCentavos: Long, occurredAt: Long): Long? =
+        db.transactionWithResult {
+            val diff = realCentavos - balance(accountId)
+            if (diff == 0L) return@transactionWithResult null
+            db.txnQueries.insert("ADJUSTMENT", diff, accountId, null, null, occurredAt)
+            db.txnQueries.lastId().executeAsOne()
+        }
+
     /** Income and spending from `from` (included) to `until` (not included). */
     fun totals(from: Long, until: Long): Totals = db.txnQueries.totals(from, until).executeAsOne()
 
