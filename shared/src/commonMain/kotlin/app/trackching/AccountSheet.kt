@@ -25,12 +25,16 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 
 /** "New account": name, type, color, starting balance. */
 @Composable
 fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
     val c = TrackchingTheme.colors
-    val form = remember { AccountForm(ledger.accountNames()) }
+    val form = remember { AccountForm(ledger.accountNames(), ledger.archivedAccountNames()) }
+    var saved by remember { mutableStateOf(false) }
 
     TrackchingSheet(title = "New account", onDismiss = onDismiss) { close ->
         Column(
@@ -87,7 +91,9 @@ fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
             OffsetBlock(
                 Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = form.canSave, role = Role.Button, onClick = {
+                    .clickable(enabled = form.canSave && !saved, role = Role.Button, onClick = {
+                        if (saved) return@clickable
+                        saved = true
                         val type = form.type
                         val starting = form.startingCentavos
                         if (type != null && starting != null) {
