@@ -75,7 +75,7 @@ private fun EventLine(event: EventRow) {
             Text(rangeLabel(event.start, event.end), color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         Text(
-            formatAmount(event.spent, AmountKind.Transfer),
+            shown(formatAmount(event.spent, AmountKind.Transfer)),
             color = if (event.spent == 0L) c.ink2 else c.ink,
             fontSize = 20.sp,
             fontWeight = FontWeight.ExtraBold,

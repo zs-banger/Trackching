@@ -33,11 +33,19 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import app.trackching.db.Txn
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.TextButton
 
 /** The 5 bottom tabs. IOUs stays disabled until Phase 3. */
 enum class Tab(
@@ -58,6 +66,7 @@ fun AppShell(database: TrackchingDatabase) {
     val c = TrackchingTheme.colors
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     val ledger = remember(database) { Ledger(database) }
+    var hidden by remember(ledger) { mutableStateOf(ledger.amountsHidden()) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(false) }
@@ -75,85 +84,105 @@ fun AppShell(database: TrackchingDatabase) {
             if (result == SnackbarResult.ActionPerformed) onUndo()
         }
     }
-
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach { t ->
-                    NavigationBarItem(
-                        selected = t == tab,
-                        onClick = { tab = t },
-                        enabled = t.enabled,
-                        icon = { Icon(painterResource(t.icon), contentDescription = null) },
-                        label = { Text(t.label, fontWeight = FontWeight.Bold) },
+    CompositionLocalProvider(LocalAmountsHidden provides hidden) {
+        Scaffold(
+            topBar = {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = {
+                        hidden = !hidden
+                        ledger.setAmountsHidden(hidden)
+                    }) {
+                        Text(if (hidden) "SHOW ₱" else "HIDE ₱", color = c.orangeInk, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            bottomBar = {
+                NavigationBar {
+                    Tab.entries.forEach { t ->
+                        NavigationBarItem(
+                            selected = t == tab,
+                            onClick = { tab = t },
+                            enabled = t.enabled,
+                            icon = { Icon(painterResource(t.icon), contentDescription = null) },
+                            label = { Text(t.label, fontWeight = FontWeight.Bold) },
+                        )
+                    }
+                }
+            },
+            floatingActionButton = {
+                // What it opens per tab is wired up in P1-4, P1-8, P1-11 and P1-14.
+                OffsetBlock(
+                    Modifier.clickable(role = Role.Button) {
+                        when (tab) {
+                            Tab.Home, Tab.Transactions -> adding = true
+                            Tab.Categories -> addingCategory = true
+                            Tab.Events -> addingEvent = true
+                            else -> {}
+                        }
+                    },
+                    color = c.blue,
+                    edge = c.orange,
+                ) {
+                    Text(
+                        "+ ${tab.addLabel.uppercase()}",
+                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        color = c.onBlue,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
                     )
                 }
+            },
+            snackbarHost = {
+                SnackbarHost(snackbar)
+            },
+        )
+        { padding ->
+            Box(Modifier.padding(padding).fillMaxSize()) {
+                when (tab) {
+                    Tab.Home -> HomeScreen(ledger)
+                    Tab.Transactions -> TransactionsScreen(ledger, onOpen = { id ->
+                        snackbar.currentSnackbarData?.dismiss()
+                        editing = ledger.get(id)
+                    })
+                    Tab.Events -> EventsScreen(ledger)
+                    Tab.Categories -> CategoriesScreen(ledger)
+                    else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
+                }
             }
-        },
-        floatingActionButton = {
-            // What it opens per tab is wired up in P1-4, P1-8, P1-11 and P1-14.
-            OffsetBlock(
-                Modifier.clickable(role = Role.Button) {
-                    when (tab) {
-                        Tab.Home, Tab.Transactions -> adding = true
-                        Tab.Categories -> addingCategory = true
-                        Tab.Events -> addingEvent = true
-                        else -> {}
-                    }
-                },
-                color = c.blue,
-                edge = c.orange,
-            ) {
-                Text(
-                    "+ ${tab.addLabel.uppercase()}",
-                    Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    color = c.onBlue,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
+            if (adding) {
+                TxnSheet(
+                    ledger = ledger,
+                    onDismiss = { adding = false },
+                    onSaved = { id -> showUndo("Saved") { ledger.undo(id) } },
                 )
             }
-        },
-        snackbarHost = { SnackbarHost(snackbar)
-        },
-    ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when (tab) {
-                Tab.Home -> HomeScreen(ledger)
-                Tab.Transactions -> TransactionsScreen(ledger, onOpen = { id ->
-                    snackbar.currentSnackbarData?.dismiss()
-                    editing = ledger.get(id)
-                })
-                Tab.Events -> EventsScreen(ledger)
-                Tab.Categories -> CategoriesScreen(ledger)
-                else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
+            if (addingCategory) {
+                CategorySheet(ledger, onDismiss = { addingCategory = false })
             }
-        }
-        if (adding) {
-            TxnSheet(
-                ledger = ledger,
-                onDismiss = { adding = false },
-                onSaved = { id -> showUndo("Saved") { ledger.undo(id) } },
-            )
-        }
-        if (addingCategory) {
-            CategorySheet(ledger, onDismiss = { addingCategory = false })
-        }
-        if (addingEvent) {
-            EventSheet(
-                ledger,
-                onDismiss = { addingEvent = false },
-                onSaved = { scope.launch { snackbar.showSnackbar("Event saved") } },
-            )
-        }
-        val toEdit = editing
-        if (toEdit != null) {
-            TxnSheet(
-                ledger = ledger,
-                editing = toEdit,
-                onDismiss = { editing = null },
-                onSaved = {},
-                onDeleted = { deleted -> showUndo("Deleted") { ledger.restore(deleted) } },
-            )
+            if (addingEvent) {
+                EventSheet(
+                    ledger,
+                    onDismiss = { addingEvent = false },
+                    onSaved = { scope.launch { snackbar.showSnackbar("Event saved") } },
+                )
+            }
+            val toEdit = editing
+            if (toEdit != null) {
+                TxnSheet(
+                    ledger = ledger,
+                    editing = toEdit,
+                    onDismiss = { editing = null },
+                    onSaved = {},
+                    onDeleted = { deleted -> showUndo("Deleted") { ledger.restore(deleted) } },
+                )
+            }
         }
     }
 }
