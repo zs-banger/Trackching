@@ -260,4 +260,31 @@ class LedgerTest {
     fun transactionNeedsARealAccount() {
         assertFails { ledger.logExpense(5_000, category("Meals"), accountId = 999, occurredAt = 0) }
     }
+
+    @Test
+    fun adjustingSetsTheExactBalance() {
+        val gcash = newAccount("GCash", 100_000)
+        ledger.logExpense(12_000, category("Meals"), gcash, 0)   // app says ₱880
+        ledger.adjust(gcash, 85_000, 0)                            // wallet says ₱850
+        assertEquals(85_000L, ledger.balance(gcash))
+        ledger.adjust(gcash, 90_000, 0)                            // found ₱50
+        assertEquals(90_000L, ledger.balance(gcash))
+    }
+
+    @Test
+    fun adjustmentIsNotIncomeOrSpending() {
+        val gcash = newAccount("GCash", 100_000)
+        ledger.adjust(gcash, 50_000, 0)
+        ledger.adjust(gcash, 70_000, 0)
+        val t = ledger.totals(0, 1)
+        assertEquals(0L, t.income)
+        assertEquals(0L, t.spent)
+    }
+
+    @Test
+    fun matchingBalanceSavesNothing() {
+        val gcash = newAccount("GCash", 100_000)
+        assertEquals(null, ledger.adjust(gcash, 100_000, 0))
+        assertEquals(0, db.txnQueries.history().executeAsList().size)
+    }
 }
