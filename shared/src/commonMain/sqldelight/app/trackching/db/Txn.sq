@@ -60,3 +60,9 @@ WHERE id = ?;
 -- Puts a deleted row back with its original id ("Deleted · Undo").
 restore:
 INSERT INTO txn VALUES ?;
+
+usageOf:
+SELECT COUNT(*) FROM txn WHERE category_id IN ?;
+
+moveCategory:
+UPDATE txn SET category_id = ? WHERE category_id IN ?;
