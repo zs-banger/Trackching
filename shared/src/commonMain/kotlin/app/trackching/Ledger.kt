@@ -14,6 +14,7 @@ import app.trackching.db.Txn
 import app.trackching.db.ManageList
 import app.trackching.db.Mains
 import app.trackching.db.MonthTotals
+import app.trackching.db.Leaves
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -199,4 +200,42 @@ class Ledger(private val db: TrackchingDatabase) {
     /** Every category of `kind` with its own total in [from, until). Re-sent when anything changes. */
     fun monthTotals(kind: String, from: Long, until: Long): Flow<List<MonthTotals>> =
         db.categoryQueries.monthTotals(from, until, kind).asFlow().mapToList(Dispatchers.Default)
+
+    /** The category plus its subcategories: everything a delete removes. */
+    private fun withSubs(categoryId: Long): List<Long> =
+        listOf(categoryId) + db.categoryQueries.subIds(categoryId).executeAsList()
+
+    /** How many transactions would need to move if this category (and its subs) were deleted. */
+    fun categoryUsage(categoryId: Long): Long =
+        db.txnQueries.usageOf(withSubs(categoryId)).executeAsOne()
+
+    /** Where this category's transactions may go: same kind, loggable, not itself or its subs. */
+    fun moveTargets(categoryId: Long): List<Leaves> {
+        val gone = withSubs(categoryId)
+        val kind = db.categoryQueries.categoryById(categoryId).executeAsOne().kind
+        return db.categoryQueries.leaves(kind).executeAsList().filter { it.id !in gone }
+    }
+
+    /**
+     * Deletes a category (and its subcategories). If any transactions use them,
+     * they all move to `moveTo` first. That's also how "merge" works.
+     */
+    fun deleteCategory(categoryId: Long, moveTo: Long?) {
+        db.transaction {
+            val gone = withSubs(categoryId)
+            val kind = db.categoryQueries.categoryById(categoryId).executeAsOne().kind
+            require(db.categoryQueries.countOthersOfKind(kind, gone).executeAsOne() > 0) {
+                "Keep at least one category"
+            }
+            if (db.txnQueries.usageOf(gone).executeAsOne() > 0) {
+                require(moveTo != null) { "Choose where its transactions go first" }
+                require(db.categoryQueries.leaves(kind).executeAsList().any { it.id == moveTo && it.id !in gone }) {
+                    "Transactions can only move to another category of the same kind"
+                }
+                db.txnQueries.moveCategory(moveTo, gone)
+            }
+            db.categoryQueries.deleteSubs(categoryId)
+            db.categoryQueries.deleteOne(categoryId)
+        }
+    }
 }
