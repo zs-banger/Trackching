@@ -36,7 +36,7 @@ fun AdjustSheet(ledger: Ledger, accountId: Long, name: String, current: Long, on
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("The app says ₱ ${shown(formatCentavos(current))}", color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("The app says ${shown("₱ " +formatCentavos(current))}", color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
