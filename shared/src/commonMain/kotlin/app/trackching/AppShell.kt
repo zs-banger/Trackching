@@ -157,13 +157,22 @@ private fun MainShell(ledger: Ledger) {
         { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (tab) {
-                    Tab.Home -> HomeScreen(ledger, onOpen = { tab = it })
-                    Tab.Transactions -> TransactionsScreen(ledger, onOpen = { id ->
-                        snackbar.currentSnackbarData?.dismiss()
-                        editing = ledger.get(id)
-                    })
-                    Tab.Events -> EventsScreen(ledger)
-                    Tab.Categories -> CategoriesScreen(ledger)
+                    Tab.Home -> HomeScreen(
+                        ledger,
+                        onOpen = { tab = it },
+                        onLog = { adding = true },
+                        onNewEvent = { addingEvent = true },
+                    )
+                    Tab.Transactions -> TransactionsScreen(
+                        ledger,
+                        onOpen = { id ->
+                            snackbar.currentSnackbarData?.dismiss()
+                            editing = ledger.get(id)
+                        },
+                        onLog = { adding = true },
+                    )
+                    Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true })
+                    Tab.Categories -> CategoriesScreen(ledger, onLog = { adding = true })
                     else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
                 }
             }

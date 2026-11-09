@@ -32,17 +32,16 @@ import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalTime::class)
 @Composable
-fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit) {
+fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () -> Unit) {
     val c = TrackchingTheme.colors
-    val rows by remember(ledger) { ledger.history() }.collectAsState(initial = emptyList())
+    val loaded by remember(ledger) { ledger.history() }.collectAsState(initial = null)
+    val rows = loaded ?: return // still loading: draw nothing for that split second
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
     val days = remember(rows) { groupByDay(rows, zone) }
 
     if (days.isEmpty()) {
-        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            Text("No transactions yet. Tap + to log one.", color = c.ink2, fontSize = 15.sp)
-        }
+        EmptyScreen("No transactions yet. Log what you spent or earned today.", "Log a transaction", onLog)
         return
     }
 
