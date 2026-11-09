@@ -37,8 +37,7 @@ import androidx.compose.foundation.clickable
 /** This month's categories: each main with its total, subs indented under it. */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun CategoriesScreen(ledger: Ledger) {
-    val c = TrackchingTheme.colors
+fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {    val c = TrackchingTheme.colors
     var kind by rememberSaveable { mutableStateOf("EXPENSE") }
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
@@ -67,6 +66,16 @@ fun CategoriesScreen(ledger: Ledger) {
                 label = { it },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
+        }
+        if (nothingLogged(groups)) {
+            item {
+                EmptyState(
+                    if (kind == "EXPENSE") "No spending this month yet" else "No income this month yet",
+                    "Log a transaction",
+                    onLog,
+                    Modifier.padding(horizontal = 16.dp),
+                )
+            }
         }
         items(groups, key = { it.main.id }) { group ->
             Box(Modifier.fillMaxWidth().background(c.band2)) {
