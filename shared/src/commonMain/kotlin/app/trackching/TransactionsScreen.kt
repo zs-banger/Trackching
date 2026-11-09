@@ -36,7 +36,7 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit) {
     val c = TrackchingTheme.colors
     val rows by remember(ledger) { ledger.history() }.collectAsState(initial = emptyList())
     val zone = remember { TimeZone.currentSystemDefault() }
-    val today = remember { Clock.System.todayIn(zone) }
+    val today = Clock.System.todayIn(zone)
     val days = remember(rows) { groupByDay(rows, zone) }
 
     if (days.isEmpty()) {

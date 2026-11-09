@@ -5,8 +5,10 @@ package app.trackching
  * Returns null if the text isn't a valid amount.
  */
 fun parseCentavos(text: String): Long? {
-    val parts = text.trim().split(".")
-    if (parts.size > 2) return null
+    val clean = text.trim()
+    if (clean.isEmpty() || clean.any { it != '.' && it !in '0'..'9' }) return null
+    val parts = clean.split(".")
+    if (parts.size > 2 || parts[0].length > 9) return null
 
     val pesos = parts[0].ifEmpty{"0"}.toLongOrNull() ?: return null
     val decimals = parts.getOrElse(1){""}

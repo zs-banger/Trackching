@@ -53,4 +53,16 @@ class MoneyTest {
         assertEquals("+ ₱ 1,232.00", formatAmount(123200, AmountKind.Income))
         assertEquals("₱ 1,232.00", formatAmount(123200, AmountKind.Transfer))
     }
+
+    @Test
+    fun signsAreRejected() {
+        assertNull(parseCentavos("-5.50"))
+        assertNull(parseCentavos("-0.50"))
+        assertNull(parseCentavos("+5"))
+    }
+
+    @Test
+    fun tooManyDigitsAreRejected() {
+        assertNull(parseCentavos("12345678901234567"))
+    }
 }

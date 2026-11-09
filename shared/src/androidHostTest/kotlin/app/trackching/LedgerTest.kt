@@ -8,10 +8,14 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertFails
+import java.util.Properties
 
 class LedgerTest {
 
-    private val db = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).let { driver ->
+    private val db = JdbcSqliteDriver(
+        JdbcSqliteDriver.IN_MEMORY,
+        Properties().apply { put("foreign_keys", "true") },
+    ).let { driver ->
         TrackchingDatabase.Schema.create(driver)
         TrackchingDatabase(driver)
     }.also { it.seedDefaults() }
@@ -233,5 +237,27 @@ class LedgerTest {
         ledger.reorder(listOf(gcash, cash()))
         ledger.addAccount("Maya", AccountType.EWallet, AccountColors[2], 0)
         assertEquals("Maya", ledger.accounts().last().name)
+    }
+
+    @Test
+    fun archivedNamesStillCountAsTaken() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        ledger.archive(gcash)
+        assertTrue("gcash" in ledger.accountNames())
+        assertEquals(setOf("gcash"), ledger.archivedAccountNames())
+    }
+
+    @Test
+    fun editingShowsAnArchivedAccount() {
+        val gcash = ledger.addAccount("GCash", AccountType.EWallet, AccountColors[1], 0)
+        val id = ledger.logExpense(5_000, category("Meals"), gcash, 0)
+        ledger.archive(gcash)
+        assertTrue(ledger.accountsFor(ledger.get(id)).any { it.id == gcash })
+        assertTrue(ledger.accountsFor(null).none { it.id == gcash })
+    }
+
+    @Test
+    fun transactionNeedsARealAccount() {
+        assertFails { ledger.logExpense(5_000, category("Meals"), accountId = 999, occurredAt = 0) }
     }
 }

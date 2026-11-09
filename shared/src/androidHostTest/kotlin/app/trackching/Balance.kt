@@ -4,12 +4,16 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.trackching.db.TrackchingDatabase
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import java.util.Properties
 
 class BalanceTest {
 
     // A fresh, empty database in memory for every test.
-    private val db = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).let { driver ->
-        TrackchingDatabase.Schema.create(driver)
+    private val db = JdbcSqliteDriver(
+        JdbcSqliteDriver.IN_MEMORY,
+        Properties().apply { put("foreign_keys", "true") },
+    ).let { driver ->
+    TrackchingDatabase.Schema.create(driver)
         TrackchingDatabase(driver)
     }
 

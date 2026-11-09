@@ -75,3 +75,9 @@ UPDATE account SET archived = ? WHERE id = ?;
 
 countActive:
 SELECT COUNT(*) FROM account WHERE archived = 0;
+
+allNames:
+SELECT name, archived FROM account;
+
+nameOf:
+SELECT name FROM account WHERE id = ?;

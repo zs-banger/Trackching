@@ -42,6 +42,12 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
         kind = newKind
     }
 
+    /** Picking the To account as From clears To, so Save and the hint stay honest. */
+    fun pickFrom(id: Long) {
+        accountId = id
+        if (toAccountId == id) toAccountId = null
+    }
+
     /** The moment to save: the original time, now, or this time yesterday. */
     fun occurredAt(now: Long): Long = when (date) {
         DateChoice.Original -> originalAt ?: now

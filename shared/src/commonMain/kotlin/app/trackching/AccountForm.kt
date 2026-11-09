@@ -17,7 +17,10 @@ val AccountColors: List<Long> = listOf(
 )
 
 /** The New account sheet's state and rules. `takenNames` are existing names in lowercase. */
-class AccountForm(private val takenNames: Set<String>) {
+class AccountForm(
+    private val takenNames: Set<String>,
+    private val archivedNames: Set<String> = emptySet(),
+) {
     var name by mutableStateOf("")
     var type by mutableStateOf<AccountType?>(null)
     var color by mutableStateOf(AccountColors.first())
@@ -27,12 +30,17 @@ class AccountForm(private val takenNames: Set<String>) {
 
     /** One message at a time, shown under the fields. */
     val error: String?
-        get() = when {
-            name.isNotBlank() && name.trim().lowercase() in takenNames ->
-                "You already have an account called ${name.trim()}"
-            starting.isNotBlank() && parseCentavos(starting) == null ->
-                "Starting balance must be a number, like 1500.00"
-            else -> null
+        get() {
+            val clean = name.trim()
+            return when {
+                clean.isNotEmpty() && clean.lowercase() in archivedNames ->
+                    "You have an archived account called $clean. Restore it from Manage."
+                clean.isNotEmpty() && clean.lowercase() in takenNames ->
+                    "You already have an account called $clean"
+                starting.isNotBlank() && parseCentavos(starting) == null ->
+                    "Starting balance must be a number, like 1500.00"
+                else -> null
+            }
         }
 
     val canSave: Boolean
