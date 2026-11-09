@@ -32,6 +32,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
+import androidx.compose.foundation.clickable
 
 /** This month's categories: each main with its total, subs indented under it. */
 @OptIn(ExperimentalTime::class)
@@ -45,6 +46,8 @@ fun CategoriesScreen(ledger: Ledger) {
     val rows by remember(ledger, kind, from) { ledger.monthTotals(kind, from, until) }
         .collectAsState(initial = emptyList())
     val groups = remember(rows) { groupCategories(rows) }
+    var deleting by remember { mutableStateOf<CategoryGroup?>(null) }
+    var deletingSub by remember { mutableStateOf<MonthTotals?>(null) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -67,16 +70,23 @@ fun CategoriesScreen(ledger: Ledger) {
         }
         items(groups, key = { it.main.id }) { group ->
             Box(Modifier.fillMaxWidth().background(c.band2)) {
-                CategoryLine(group.main, group.total, bold = true, size = 17.sp)
+                CategoryLine(group.main, group.total, onClick = { deleting = group }, bold = true, size = 17.sp)
             }
             // Money logged on a main *before* it got subcategories: show it, so the subs add up.
             if (group.subs.isNotEmpty() && group.main.total != 0L) {
-                CategoryLine(group.main, group.main.total, indent = true, nameOverride = "${group.main.name} (directly)")
+                CategoryLine(group.main, group.main.total, onClick = { deleting = group }, indent = true, nameOverride = "${group.main.name} (directly)")
             }
             group.subs.forEach { sub ->
-                CategoryLine(sub, sub.total, indent = true)
+                CategoryLine(sub, sub.total, onClick = { deletingSub = sub }, indent = true)
             }
         }
+    }
+
+    deleting?.let { g ->
+        DeleteCategorySheet(ledger, g.main.id, g.main.name, hasSubs = g.subs.isNotEmpty(), onDismiss = { deleting = null })
+    }
+    deletingSub?.let { s ->
+        DeleteCategorySheet(ledger, s.id, s.name, hasSubs = false, onDismiss = { deletingSub = null })
     }
 }
 
@@ -84,6 +94,7 @@ fun CategoriesScreen(ledger: Ledger) {
 private fun CategoryLine(
     row: MonthTotals,
     total: Long,
+    onClick: () -> Unit,
     bold: Boolean = false,
     indent: Boolean = false,
     size: TextUnit = 15.sp,
@@ -93,6 +104,7 @@ private fun CategoryLine(
     Row(
         Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(start = if (indent) 40.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
