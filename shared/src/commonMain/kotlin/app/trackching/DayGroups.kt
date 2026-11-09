@@ -15,7 +15,8 @@ data class Day(val date: LocalDate, val net: Long, val items: List<History>)
 fun kindOf(kind: String): AmountKind = when (kind) {
     "INCOME" -> AmountKind.Income
     "TRANSFER" -> AmountKind.Transfer
-    else -> AmountKind.Expense
+    "EXPENSE" -> AmountKind.Expense
+    else -> error("Unknown kind $kind")
 }
 
 /** Rows must already be newest first (the history query does that). */

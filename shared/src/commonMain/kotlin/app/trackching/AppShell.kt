@@ -112,7 +112,10 @@ fun AppShell(database: TrackchingDatabase) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (tab) {
                 Tab.Home -> HomeScreen(ledger)
-                Tab.Transactions -> TransactionsScreen(ledger, onOpen = { id -> editing = ledger.get(id) })
+                Tab.Transactions -> TransactionsScreen(ledger, onOpen = { id ->
+                    snackbar.currentSnackbarData?.dismiss()
+                    editing = ledger.get(id)
+                })
                 else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
             }
         }

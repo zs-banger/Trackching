@@ -50,7 +50,8 @@ fun TxnSheet(
 ) {
     val c = TrackchingTheme.colors
     val form = remember { editing?.let { TxnForm.from(it) } ?: TxnForm(ledger.lastAccountUsed()) }
-    val accounts = remember { ledger.accounts() }
+    var saved by remember { mutableStateOf(false) }
+    val accounts = remember { ledger.accountsFor(editing) }
     // When editing, show every category so the current one is visible.
     var showAll by remember { mutableStateOf(editing != null) }
     val categoryKind = if (form.kind == AmountKind.Income) "INCOME" else "EXPENSE"
@@ -120,7 +121,7 @@ fun TxnSheet(
                 AmountKind.Transfer -> "From"
             }
             Field(fromLabel) {
-                AccountChips(accounts, selected = form.accountId, onPick = { form.accountId = it })
+                AccountChips(accounts, selected = form.accountId, onPick = { form.pickFrom(it) })
             }
             if (form.kind == AmountKind.Transfer) {
                 Field("To") {
@@ -149,8 +150,10 @@ fun TxnSheet(
 
         Keypad(
             onKey = form::onKey,
-            saveEnabled = form.canSave,
+            saveEnabled = form.canSave && !saved,
             onSave = {
+                if (saved) return@Keypad
+                saved = true
                 val now = nowMillis()
                 val edited = form.edited(now)
                 if (edited != null) {

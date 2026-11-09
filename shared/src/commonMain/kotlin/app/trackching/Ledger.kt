@@ -66,6 +66,15 @@ class Ledger(private val db: TrackchingDatabase) {
     /** Accounts you can pay from, in order. */
     fun accounts(): List<Active> = db.accountQueries.active().executeAsList()
 
+    /** Active accounts, plus any archived one this transaction already uses (so editing still shows it). */
+    fun accountsFor(txn: Txn?): List<Active> {
+        val active = accounts()
+        if (txn == null) return active
+        val missing = listOfNotNull(txn.account_id, txn.to_account_id)
+            .filter { id -> active.none { it.id == id } }
+        return active + missing.map { id -> Active(id, db.accountQueries.nameOf(id).executeAsOne()) }
+    }
+
     /** Every account's balance, re-sent automatically whenever a transaction changes. */
     fun balances(): Flow<List<Balances>> =
         db.accountQueries.balances().asFlow().mapToList(Dispatchers.Default)
@@ -116,9 +125,16 @@ class Ledger(private val db: TrackchingDatabase) {
         }
     }
 
-    /** Every account name in lowercase, for the "already exists" check. */
+    /** Every account name in lowercase, archived ones too (the database blocks those as well). */
     fun accountNames(): Set<String> =
-        db.accountQueries.active().executeAsList().map { it.name.lowercase() }.toSet()
+        db.accountQueries.allNames().executeAsList().map { it.name.lowercase() }.toSet()
+
+    /** Just the archived names, so the form can suggest Restore instead. */
+    fun archivedAccountNames(): Set<String> =
+        db.accountQueries.allNames().executeAsList()
+            .filter { it.archived != 0L }
+            .map { it.name.lowercase() }
+            .toSet()
 
     /** All accounts for the Manage screen, archived ones last. */
     fun manageList(): Flow<List<ManageList>> =

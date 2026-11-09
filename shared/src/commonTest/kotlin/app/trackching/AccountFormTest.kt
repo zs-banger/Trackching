@@ -57,4 +57,12 @@ class AccountFormTest {
     fun noErrorWhenFine() {
         assertNull(filled().error)
     }
+
+    @Test
+    fun archivedNameSuggestsRestore() {
+        val form = AccountForm(takenNames = setOf("gcash"), archivedNames = setOf("gcash"))
+        form.name = "GCash"
+        assertEquals("You have an archived account called GCash. Restore it from Manage.", form.error)
+        assertFalse(form.canSave)
+    }
 }
