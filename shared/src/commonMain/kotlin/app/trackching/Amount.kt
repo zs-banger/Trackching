@@ -23,9 +23,11 @@ fun Amount(
     kind: AmountKind,
     modifier: Modifier = Modifier,
     maxFontSize: TextUnit = 32.sp,
+    alwaysShow: Boolean = false,
 ) {
+    val text = formatAmount(centavos, kind)
     BasicText(
-        text = formatAmount(centavos, kind),
+        text = if (alwaysShow) text else shown(text),
         modifier = modifier,
         style = TextStyle(
             fontFamily = FontFamily(Font(Res.font.noto_sans_regular)),
