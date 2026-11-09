@@ -11,7 +11,7 @@ import kotlinx.datetime.toLocalDateTime
 
 /** One day in the list: its date, its net, and its transactions (newest first). */
 data class Day(val date: LocalDate, val net: Long, val items: List<History>)
-
+const val ADJUSTMENT = "ADJUSTMENT"
 fun kindOf(kind: String): AmountKind = when (kind) {
     "INCOME" -> AmountKind.Income
     "TRANSFER" -> AmountKind.Transfer
@@ -24,7 +24,7 @@ fun kindOf(kind: String): AmountKind = when (kind) {
 fun groupByDay(rows: List<History>, zone: TimeZone): List<Day> =
     rows.groupBy { Instant.fromEpochMilliseconds(it.occurred_at).toLocalDateTime(zone).date }
         .map { (date, items) ->
-            val net = items.sumOf { row ->
+            val net = items.filter { it.kind != ADJUSTMENT }.sumOf { row ->
                 when (kindOf(row.kind)) {
                     AmountKind.Income -> row.centavos
                     AmountKind.Expense -> -row.centavos

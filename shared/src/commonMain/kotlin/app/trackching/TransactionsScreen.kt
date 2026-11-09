@@ -78,16 +78,27 @@ private fun DayHeader(label: String, net: Long) {
 @Composable
 private fun TxnRow(row: History, onClick: () -> Unit) {
     val c = TrackchingTheme.colors
-    val kind = kindOf(row.kind)
-    val title = row.category_name ?: "Transfer"
+    val adjustment = row.kind == ADJUSTMENT
+    val title = when {
+        adjustment -> "Balance adjustment"
+        else -> row.category_name ?: "Transfer"
+    }
     val subtitle = if (row.to_account_name != null) "${row.account_name} → ${row.to_account_name}" else row.account_name
-    val amountColor = when (kind) {
+    val amountText = if (adjustment) {
+        (if (row.centavos < 0) "− " else "+ ") + formatAmount(row.centavos, AmountKind.Transfer)
+    } else {
+        formatAmount(row.centavos, kindOf(row.kind))
+    }
+    val amountColor = if (adjustment) c.ink2 else when (kindOf(row.kind)) {
         AmountKind.Expense -> c.expense
         AmountKind.Income -> c.income
         AmountKind.Transfer -> c.ink2
     }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).background(c.band).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth()
+            .clickable(enabled = !adjustment, onClick = onClick)
+            .background(c.band)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -95,6 +106,6 @@ private fun TxnRow(row: History, onClick: () -> Unit) {
             Text(title, color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(formatAmount(row.centavos, kind), color = amountColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(amountText, color = amountColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
     }
 }
