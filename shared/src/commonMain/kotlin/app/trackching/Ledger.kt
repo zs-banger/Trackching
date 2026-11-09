@@ -15,6 +15,7 @@ import app.trackching.db.ManageList
 import app.trackching.db.Mains
 import app.trackching.db.MonthTotals
 import app.trackching.db.Leaves
+import kotlinx.datetime.LocalDate
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -236,6 +237,17 @@ class Ledger(private val db: TrackchingDatabase) {
             }
             db.categoryQueries.deleteSubs(categoryId)
             db.categoryQueries.deleteOne(categoryId)
+        }
+    }
+
+    /** Saves an event. No end date means it's ongoing. Returns its id. */
+    fun addEvent(name: String, start: LocalDate, end: LocalDate?): Long {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "An event needs a name" }
+        require(end == null || end >= start) { "The end date can't be before the start date" }
+        return db.transactionWithResult {
+            db.eventQueries.insert(clean, start.toString(), end?.toString())
+            db.eventQueries.lastId().executeAsOne()
         }
     }
 }
