@@ -330,4 +330,14 @@ class LedgerTest {
         // Skips Ledger on purpose: proves the unique index works on its own, even with NULL parents.
         assertFails { db.categoryQueries.create("TRANSPORTATION", "EXPENSE", null, CategoryColors[0], "🚌") }
     }
+
+    @Test
+    fun monthTotalsKeepUnusedCategoriesAtZero() {
+        ledger.logExpense(12_000, category("Meals"), cash(), occurredAt = 1_000)
+        ledger.logExpense(9_999, category("Meals"), cash(), occurredAt = 5_000) // outside the range
+        val rows = db.categoryQueries.monthTotals(0, 2_000, "EXPENSE").executeAsList()
+        assertEquals(12_000L, rows.first { it.name == "Meals" }.total)
+        assertEquals(0L, rows.first { it.name == "Coffee" }.total)
+        assertEquals(db.categoryQueries.mains("EXPENSE").executeAsList().size + 7, rows.size)
+    }
 }
