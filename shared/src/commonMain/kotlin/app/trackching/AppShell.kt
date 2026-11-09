@@ -153,8 +153,7 @@ private fun MainShell(ledger: Ledger) {
             snackbarHost = {
                 SnackbarHost(snackbar)
             },
-        )
-        { padding ->
+        ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (tab) {
                     Tab.Home -> HomeScreen(
