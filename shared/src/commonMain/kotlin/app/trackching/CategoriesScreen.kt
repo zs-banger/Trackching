@@ -121,7 +121,7 @@ private fun CategoryLine(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            formatAmount(total, AmountKind.Transfer), // no sign: the tab already says Expense or Income
+            shown(formatAmount(total, AmountKind.Transfer)), // no sign: the tab already says Expense or Income
             color = if (total == 0L) c.ink2 else c.ink,
             fontSize = size,
             fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,

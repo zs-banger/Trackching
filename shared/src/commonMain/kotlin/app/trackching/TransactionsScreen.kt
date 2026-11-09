@@ -71,7 +71,7 @@ private fun DayHeader(label: String, net: Long) {
     ) {
         Tag(label)
         val kind = if (net < 0) AmountKind.Expense else if (net > 0) AmountKind.Income else AmountKind.Transfer
-        Text(formatAmount(net, kind), color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+        Text(shown(formatAmount(net, kind)), color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
@@ -106,6 +106,6 @@ private fun TxnRow(row: History, onClick: () -> Unit) {
             Text(title, color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(amountText, color = amountColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(shown(amountText), color = amountColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
     }
 }
