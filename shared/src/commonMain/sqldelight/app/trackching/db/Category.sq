@@ -5,8 +5,15 @@ CREATE TABLE category (
     kind TEXT NOT NULL CHECK (kind IN ('EXPENSE', 'INCOME')),
     parent_id INTEGER REFERENCES category(id),
     color INTEGER NOT NULL,              -- 0xAARRGGBB, e.g. 0xFFE07A00
-    sort_order INTEGER NOT NULL DEFAULT 0
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    icon TEXT NOT NULL DEFAULT '🏷️'
+
 );
+
+-- Same name can't appear twice under one parent. Main categories have no parent (NULL),
+-- and NULLs never count as equal, so we compare COALESCE(parent_id, 0) instead.
+CREATE UNIQUE INDEX category_unique_name
+ON category(kind, COALESCE(parent_id, 0), name COLLATE NOCASE);
 
 insert:
 INSERT INTO category(name, kind, parent_id, color, sort_order)
@@ -30,3 +37,24 @@ WHERE c.kind = ?
 GROUP BY c.id
 ORDER BY uses DESC, c.sort_order, c.id
 LIMIT ?;
+
+-- New category, placed last.
+create:
+INSERT INTO category(name, kind, parent_id, color, icon, sort_order)
+VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM category));
+
+-- `IS` (not `=`) so that "parent_id IS NULL" matches main categories too.
+nameTaken:
+SELECT COUNT(*) FROM category
+WHERE kind = ? AND parent_id IS ? AND name = ? COLLATE NOCASE;
+
+namesUnder:
+SELECT name FROM category WHERE kind = ? AND parent_id IS ?;
+
+mains:
+SELECT id, name, color, icon FROM category
+WHERE kind = ? AND parent_id IS NULL
+ORDER BY sort_order, id;
+
+parentInfo:
+SELECT kind, parent_id FROM category WHERE id = ?;
