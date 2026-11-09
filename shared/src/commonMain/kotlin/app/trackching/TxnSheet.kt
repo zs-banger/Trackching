@@ -128,10 +128,13 @@ fun TxnSheet(
             Field(fromLabel) {
                 AccountChips(accounts, selected = form.accountId, onPick = { form.pickFrom(it) })
             }
-            // Which event this transaction falls in, by its date. Only for new expenses and income.
-            val zone = remember { TimeZone.currentSystemDefault() }
-            val suggested = remember(form.date) {
-                if (editing != null) null else ledger.activeEventOn(dayOf(form.occurredAt(nowMillis()), zone))
+            if (suggested != null && form.kind != AmountKind.Transfer) {
+                Field("Event") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip(suggested.name, selected = !form.tagOff, onClick = { form.tagOff = false })
+                        Chip("No event", selected = form.tagOff, onClick = { form.tagOff = true })
+                    }
+                }
             }
             if (form.kind == AmountKind.Transfer) {
                 Field("To") {
