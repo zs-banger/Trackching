@@ -1,0 +1,12 @@
+-- Small app settings, one row each: ('amounts_hidden', 'true').
+CREATE TABLE setting (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL
+);
+
+get:
+SELECT value FROM setting WHERE key = ?;
+
+-- Insert, or overwrite if the key is already there.
+put:
+INSERT OR REPLACE INTO setting(key, value) VALUES (?, ?);
