@@ -43,11 +43,17 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEv
     val today = Clock.System.todayIn(zone)
     val (monthFrom, monthUntil) = remember(today) { monthRange(today, zone) }
 
-    val balances by remember(ledger) { ledger.balances() }.collectAsState(initial = emptyList())
-    val events by remember(ledger) { ledger.eventsWithTotals() }.collectAsState(initial = emptyList())
-    val months by remember(ledger, monthFrom) { ledger.monthTotals("EXPENSE", monthFrom, monthUntil) }
-        .collectAsState(initial = emptyList())
-    val history by remember(ledger) { ledger.history() }.collectAsState(initial = emptyList())
+    val loadedBalances by remember(ledger) { ledger.balances() }.collectAsState(initial = null)
+    val loadedEvents by remember(ledger) { ledger.eventsWithTotals() }.collectAsState(initial = null)
+    val loadedMonths by remember(ledger, monthFrom) { ledger.monthTotals("EXPENSE", monthFrom, monthUntil) }
+        .collectAsState(initial = null)
+    val loadedHistory by remember(ledger) { ledger.history() }.collectAsState(initial = null)
+
+    // Wait for all four, so no section flashes "empty" or ₱ 0.00 while loading.
+    val balances = loadedBalances ?: return
+    val events = loadedEvents ?: return
+    val months = loadedMonths ?: return
+    val history = loadedHistory ?: return
 
     val active = remember(events, today) { splitEvents(events, today).getValue(EventStatus.Active) }
     val top = remember(months) { topCategories(groupCategories(months)) }
