@@ -36,7 +36,7 @@ fun AdjustSheet(ledger: Ledger, accountId: Long, name: String, current: Long, on
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("The app says ₱ ${formatCentavos(current)}", color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("The app says ₱ ${shown(formatCentavos(current))}", color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
@@ -51,8 +51,8 @@ fun AdjustSheet(ledger: Ledger, accountId: Long, name: String, current: Long, on
                     text.isBlank() -> ""
                     diff == null -> "Enter an amount like 1250.50"
                     diff == 0L -> "Already matches. Nothing to adjust."
-                    diff > 0 -> "Adds + ₱ ${formatCentavos(diff)}"
-                    else -> "Removes − ₱ ${formatCentavos(diff)}"
+                    diff > 0 -> shown("Adds + ₱ ${formatCentavos(diff)}")
+                    else -> shown("Removes − ₱ ${formatCentavos(diff)}")
                 },
                 color = if (diff == null && text.isNotBlank()) c.expense else c.ink2,
                 fontSize = 13.sp,

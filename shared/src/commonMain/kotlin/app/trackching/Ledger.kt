@@ -268,4 +268,12 @@ class Ledger(private val db: TrackchingDatabase) {
     /** The event a transaction on `day` should be tagged to, or null. */
     fun activeEventOn(day: LocalDate): ActiveOn? =
         db.eventQueries.activeOn(day.toString()).executeAsOneOrNull()
+
+    /** Whether amounts are hidden (the HIDE ₱ button). Off until you turn it on. */
+    fun amountsHidden(): Boolean =
+        db.settingQueries.get("amounts_hidden").executeAsOneOrNull() == "true"
+
+    fun setAmountsHidden(hidden: Boolean) {
+        db.settingQueries.put("amounts_hidden", hidden.toString())
+    }
 }

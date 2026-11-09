@@ -98,7 +98,7 @@ fun TxnSheet(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Amount(form.centavos, form.kind, maxFontSize = 40.sp)
+            Amount(form.centavos, form.kind, maxFontSize = 40.sp, alwaysShow = true)
             Text(hint, color = c.ink2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
 
