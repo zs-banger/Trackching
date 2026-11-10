@@ -14,9 +14,9 @@ class HomeTest {
     @Test
     fun totalAddsEveryAccountIncludingNegatives() {
         val accounts = listOf(
-            Balances(1, "Cash", 0, 100_000),
-            Balances(2, "GCash", 0, 50_000),
-            Balances(3, "BPI", 0, -20_000),
+            Balances(1, "Cash", 0, 100_000, "CASH"),
+            Balances(2, "GCash", 0, 50_000, "CASH"),
+            Balances(3, "BPI", 0, -20_000, "CASH"),
         )
         assertEquals(130_000L, totalBalance(accounts))
     }
@@ -39,7 +39,7 @@ class HomeTest {
     }
 
     private val hour = 60L * 60 * 1000
-    private fun row(id: Long, at: Long) = History(id, "EXPENSE", 100, at, "Meals", "Cash", null)
+    private fun row(id: Long, at: Long) = History(id, "EXPENSE", 100, at, "Meals", "Cash", null, 1, null)
 
     @Test
     fun todayOnlyKeepsToday() {

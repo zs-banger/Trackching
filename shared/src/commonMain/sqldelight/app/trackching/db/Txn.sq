@@ -44,7 +44,9 @@ history:
 SELECT t.id, t.kind, t.centavos, t.occurred_at,
        c.name AS category_name,
        a.name AS account_name,
-       ta.name AS to_account_name
+       ta.name AS to_account_name,
+       t.account_id,
+       t.to_account_id
 FROM txn t
 JOIN account a ON a.id = t.account_id
 LEFT JOIN account ta ON ta.id = t.to_account_id
@@ -71,3 +73,6 @@ UPDATE txn SET category_id = ? WHERE category_id IN ?;
 
 setEvent:
 UPDATE txn SET event_id = ? WHERE id = ?;
+
+movements:
+SELECT kind, centavos, account_id, to_account_id, occurred_at FROM txn;
