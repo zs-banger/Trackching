@@ -28,6 +28,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalTime::class)
 @Composable
@@ -40,9 +43,14 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
     val rows = if (account == null) allRows else historyFor(allRows, account)
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
-    val days = remember(rows) { groupByDay(rows, zone) }
+    var period by rememberSaveable { mutableStateOf(Period.ThisMonth) }
+    var tab by rememberSaveable { mutableStateOf(TypeTab.All) }
 
-    if (days.isEmpty()) {
+    val inPeriod = remember(rows, period, today) { inRange(rows, periodRange(period, today, zone)) }
+    val flow = remember(inPeriod) { flowOf(inPeriod) }
+    val days = remember(inPeriod, tab) { groupByDay(rowsFor(tab, inPeriod), zone) }
+
+    if (rows.isEmpty()) {
         EmptyScreen("No transactions yet. Log what you spent or earned today.", "Log a transaction", onLog)
         return
     }
@@ -52,6 +60,31 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
         contentPadding = PaddingValues(bottom = 96.dp), // room for the + button
     ) {
         if (onBack != null) item { BackLink("Accounts", onBack) }
+        item {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                PeriodChips(period, onSelect = { period = it })
+                FlowCard(flow, period, onPickTab = { tab = it })
+            }
+        }
+        item {
+            SegmentedTabs(
+                options = TypeTab.entries,
+                selected = tab,
+                onSelect = { tab = it },
+                label = { it.label },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+        if (days.isEmpty()) {
+            item {
+                Text(
+                    "Nothing here for ${period.label.lowercase()}.",
+                    Modifier.padding(16.dp),
+                    color = c.ink2,
+                    fontSize = 15.sp,
+                )
+            }
+        }
         days.forEach { day ->
             stickyHeader(key = day.date.toString()) {
                 DayHeader(dayLabel(day.date, today), day.net)
