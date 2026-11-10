@@ -12,7 +12,7 @@ class DayGroupsTest {
     private val day = 24 * hour
 
     private fun row(id: Long, kind: String, centavos: Long, at: Long) =
-        History(id, kind, centavos, at, "Meals", "Cash on hand", null)
+        History(id, kind, centavos, at, "Meals", "Cash on hand", null, 1, null)
 
     @Test
     fun groupsNewestDayFirst() {
