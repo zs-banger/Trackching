@@ -61,7 +61,7 @@ fun TxnSheet(
     var pickingDate by remember { mutableStateOf(false) }
     // Which event this transaction falls in, by its date. Only for new expenses and income.
     val zone = remember { TimeZone.currentSystemDefault() }
-    val suggested = remember(form.date) {
+    val suggested = remember(form.date, form.pickedDay) {
         if (editing != null) null else ledger.activeEventOn(dayOf(form.occurredAt(nowMillis()), zone))
     }
 
