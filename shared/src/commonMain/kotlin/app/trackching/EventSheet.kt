@@ -39,13 +39,21 @@ private enum class Picking { Start, End }
 /** "New event": name, start date, optional end date. */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun EventSheet(ledger: Ledger, onDismiss: () -> Unit, onSaved: () -> Unit) {
+fun EventSheet(
+    ledger: Ledger,
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit,
+    editing: EventRow? = null,
+    onDeleted: (DeletedEvent) -> Unit = {},
+) {
     val c = TrackchingTheme.colors
-    val form = remember { EventForm(Clock.System.todayIn(TimeZone.currentSystemDefault())) }
+    val form = remember {
+        EventForm(Clock.System.todayIn(TimeZone.currentSystemDefault())).also { f -> editing?.let { f.loadFrom(it) } }
+    }
     var picking by remember { mutableStateOf<Picking?>(null) }
     var saved by remember { mutableStateOf(false) }
 
-    TrackchingSheet(title = "New event", onDismiss = onDismiss) { close ->
+    TrackchingSheet(title = if (editing == null) "New event" else "Edit event", onDismiss = onDismiss) { close ->
         Column(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -79,7 +87,8 @@ fun EventSheet(ledger: Ledger, onDismiss: () -> Unit, onSaved: () -> Unit) {
                 Modifier.fillMaxWidth().clickable(enabled = form.canSave && !saved, role = Role.Button) {
                     if (saved) return@clickable
                     saved = true
-                    ledger.addEvent(form.name, form.start, form.end)
+                    if (editing == null) ledger.addEvent(form.name, form.start, form.end)
+                    else ledger.updateEvent(editing.id, form.name, form.start, form.end)
                     onSaved()
                     close()
                 },
@@ -87,12 +96,24 @@ fun EventSheet(ledger: Ledger, onDismiss: () -> Unit, onSaved: () -> Unit) {
                 edge = if (form.canSave) c.blue else c.line,
             ) {
                 Text(
-                    "SAVE EVENT",
+                    if (editing == null) "SAVE EVENT" else "SAVE CHANGES",
                     Modifier.padding(12.dp),
                     color = if (form.canSave) c.onOrange else c.ink2,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                 )
+            }
+
+            if (editing != null) {
+                TextButton(
+                    onClick = {
+                        ledger.deleteEvent(editing.id)?.let(onDeleted)
+                        close()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("DELETE EVENT", color = c.expense, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

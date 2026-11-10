@@ -89,6 +89,7 @@ private fun MainShell(ledger: Ledger) {
     var addingCategory by remember { mutableStateOf(false) }
     var addingEvent by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Txn?>(null) }
+    var editingEvent by remember { mutableStateOf<EventRow?>(null) }
 
     // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.
     fun showUndo(message: String, onUndo: () -> Unit) {
@@ -172,6 +173,7 @@ private fun MainShell(ledger: Ledger) {
                             onLog = { adding = true },
                             onNewEvent = { addingEvent = true },
                             onOpenAccounts = { open(Page.Accounts) },
+                            onOpenEvent = { open(Page.EventDetail(it, "Home")) },
                         )
 
                         Tab.Transactions -> TransactionsScreen(
@@ -184,7 +186,8 @@ private fun MainShell(ledger: Ledger) {
                             onOpenReports = { open(Page.IncomeVsExpenses) },
                         )
 
-                        Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true })
+                        Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true },
+                            onOpenEvent = { open(Page.EventDetail(it, "Events")) })
                         Tab.Categories -> CategoriesScreen(ledger, onLog = { adding = true })
                         else -> Text(
                             "${tab.label} is coming soon",
@@ -223,6 +226,28 @@ private fun MainShell(ledger: Ledger) {
                         backTo = "Income vs Expenses",
                         onBack = ::back,
                     )
+                    is Page.EventDetail -> EventScreen(
+                        ledger,
+                        eventId = page.id,
+                        backTo = page.from,
+                        onBack = ::back,
+                        onEdit = { editingEvent = it },
+                        onOpenTransactions = { bucket, tab -> open(Page.EventHistory(page.id, bucket, tab)) },
+                        onLog = { adding = true },
+                    )
+                    is Page.EventHistory -> TransactionsScreen(
+                        ledger,
+                        onOpen = { id ->
+                            snackbar.currentSnackbarData?.dismiss()
+                            editing = ledger.get(id)
+                        },
+                        onLog = { adding = true },
+                        event = page.eventId,
+                        fixed = page.bucket,
+                        startTab = page.tab,
+                        backTo = page.bucket.title,
+                        onBack = ::back,
+                    )
                 }
             }
             if (adding) {
@@ -250,6 +275,23 @@ private fun MainShell(ledger: Ledger) {
                     onDismiss = { editing = null },
                     onSaved = {},
                     onDeleted = { deleted -> showUndo("Deleted") { ledger.restore(deleted) } },
+                )
+            }
+            val eventToEdit = editingEvent
+            if (eventToEdit != null) {
+                EventSheet(
+                    ledger,
+                    editing = eventToEdit,
+                    onDismiss = { editingEvent = null },
+                    onSaved = { scope.launch { snackbar.showSnackbar("Event saved") } },
+                    onDeleted = { deleted ->
+                        // Close the deleted event's pages, then offer Undo.
+                        pages = pages.filterNot {
+                            (it is Page.EventDetail && it.id == deleted.event.id) ||
+                                (it is Page.EventHistory && it.eventId == deleted.event.id)
+                        }
+                        showUndo("Event deleted") { ledger.restoreEvent(deleted) }
+                    },
                 )
             }
         }

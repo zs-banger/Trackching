@@ -1,6 +1,7 @@
 package app.trackching
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +31,7 @@ import kotlinx.datetime.todayIn
 /** Events split into Active, Upcoming and Past, each with what was spent. */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun EventsScreen(ledger: Ledger, onNewEvent: () -> Unit) {
+fun EventsScreen(ledger: Ledger, onNewEvent: () -> Unit, onOpenEvent: (Long) -> Unit) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger) { ledger.eventsWithTotals() }.collectAsState(initial = null)
     val rows = loaded ?: return // still loading
@@ -54,7 +55,7 @@ fun EventsScreen(ledger: Ledger, onNewEvent: () -> Unit) {
                     }
                 }
                 items(events, key = { it.id }) { event ->
-                    EventLine(event)
+                    EventLine(event, onClick = { onOpenEvent(event.id) })
                 }
             }
         }
@@ -62,10 +63,10 @@ fun EventsScreen(ledger: Ledger, onNewEvent: () -> Unit) {
 }
 
 @Composable
-private fun EventLine(event: EventRow) {
+private fun EventLine(event: EventRow, onClick: () -> Unit) {
     val c = TrackchingTheme.colors
     Row(
-        Modifier.fillMaxWidth().background(c.band).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).background(c.band).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {

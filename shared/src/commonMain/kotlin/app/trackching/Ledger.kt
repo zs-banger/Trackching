@@ -19,6 +19,12 @@ import kotlinx.datetime.LocalDate
 import app.trackching.db.WithTotals
 import app.trackching.db.ActiveOn
 import app.trackching.db.Movements
+import app.cash.sqldelight.coroutines.mapToOneOrNull
+import app.trackching.db.Event
+import app.trackching.db.EventSpending
+
+/** A deleted event and the transactions it had, so Undo can put both back. */
+data class DeletedEvent(val event: Event, val txnIds: List<Long>)
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -272,6 +278,42 @@ class Ledger(private val db: TrackchingDatabase) {
     /** The event a transaction on `day` should be tagged to, or null. */
     fun activeEventOn(day: LocalDate): ActiveOn? =
         db.eventQueries.activeOn(day.toString()).executeAsOneOrNull()
+
+    /** One event, re-sent when it changes. Null once it's deleted. */
+    fun event(id: Long): Flow<Event?> =
+        db.eventQueries.byId(id).asFlow().mapToOneOrNull(Dispatchers.Default)
+
+    /** The ids of the transactions tagged to an event. */
+    fun eventTxnIds(id: Long): Flow<List<Long>> =
+        db.txnQueries.idsForEvent(id).asFlow().mapToList(Dispatchers.Default)
+
+    /** An event's spending per main category, largest first. */
+    fun eventSpending(id: Long): Flow<List<EventSpending>> =
+        db.txnQueries.eventSpending(id).asFlow().mapToList(Dispatchers.Default)
+
+    /** Renames an event or changes its dates. Same rules as adding one. */
+    fun updateEvent(id: Long, name: String, start: LocalDate, end: LocalDate?) {
+        val clean = name.trim()
+        require(clean.isNotEmpty()) { "An event needs a name" }
+        require(end == null || end >= start) { "The end date can't be before the start date" }
+        db.eventQueries.update(clean, start.toString(), end?.toString(), id)
+    }
+
+    /** Deletes an event. Its transactions stay but are untagged. Returns what Undo needs. */
+    fun deleteEvent(id: Long): DeletedEvent? = db.transactionWithResult {
+        val event = db.eventQueries.byId(id).executeAsOneOrNull() ?: return@transactionWithResult null
+        val ids = db.txnQueries.idsForEvent(id).executeAsList()
+        db.txnQueries.untagEvent(id)
+        db.eventQueries.delete(id)
+        DeletedEvent(event, ids)
+    }
+
+    /** Undo for deleteEvent: the event comes back with its old id, and its transactions are tagged again. */
+    fun restoreEvent(deleted: DeletedEvent) = db.transaction {
+        val e = deleted.event
+        db.eventQueries.restore(e.id, e.name, e.start_date, e.end_date)
+        deleted.txnIds.forEach { db.txnQueries.setEvent(e.id, it) }
+    }
 
     /** Whether amounts are hidden (the HIDE ₱ button). Off until you turn it on. */
     fun amountsHidden(): Boolean =
