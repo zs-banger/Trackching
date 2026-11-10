@@ -1,19 +1,34 @@
 package app.trackching
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -21,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.trackching.db.TrackchingDatabase
+import app.trackching.db.Txn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import trackching.shared.generated.resources.Res
@@ -29,23 +47,6 @@ import trackching.shared.generated.resources.ic_events
 import trackching.shared.generated.resources.ic_home
 import trackching.shared.generated.resources.ic_ious
 import trackching.shared.generated.resources.ic_transactions
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import app.trackching.db.Txn
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.TextButton
 
 /** The 5 bottom tabs. IOUs stays disabled until Phase 3. */
 enum class Tab(
@@ -77,6 +78,11 @@ fun AppShell(database: TrackchingDatabase) {
 private fun MainShell(ledger: Ledger) {
     val c = TrackchingTheme.colors
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
+    var pages by remember { mutableStateOf(listOf<Page>()) }
+    fun back() { pages = pages.dropLast(1) }
+    fun open(page: Page) { pages = pages + page }
+
+    PlatformBackHandler(enabled = pages.isNotEmpty()) { back() }
     var hidden by remember(ledger) { mutableStateOf(ledger.amountsHidden()) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -122,6 +128,7 @@ private fun MainShell(ledger: Ledger) {
                             onClick = {
                                 snackbar.currentSnackbarData?.dismiss() // an Undo belongs to the tab it came from
                                 tab = t
+                                pages = emptyList()
                             },
                             enabled = t.enabled,
                             icon = { Icon(painterResource(t.icon), contentDescription = null) },
@@ -158,24 +165,47 @@ private fun MainShell(ledger: Ledger) {
             },
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
-                when (tab) {
-                    Tab.Home -> HomeScreen(
+                when (val page = pages.lastOrNull()) {
+                    null -> when (tab) {
+                        Tab.Home -> HomeScreen(
+                            ledger,
+                            onOpen = { tab = it },
+                            onLog = { adding = true },
+                            onNewEvent = { addingEvent = true },
+                            onOpenAccounts = { open(Page.Accounts) },
+                        )
+
+                        Tab.Transactions -> TransactionsScreen(
+                            ledger,
+                            onOpen = { id ->
+                                snackbar.currentSnackbarData?.dismiss()
+                                editing = ledger.get(id)
+                            },
+                            onLog = { adding = true },
+                        )
+
+                        Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true })
+                        Tab.Categories -> CategoriesScreen(ledger, onLog = { adding = true })
+                        else -> Text(
+                            "${tab.label} is coming soon",
+                            Modifier.align(Alignment.Center)
+                        )
+                    }
+                    Page.Accounts -> AccountsScreen(
                         ledger,
-                        onOpen = { tab = it },
-                        onLog = { adding = true },
-                        onNewEvent = { addingEvent = true },
+                        onBack = ::back,
+                        onOpenAccount = { open(Page.AccountHistory(it.id, it.name)) },
                     )
-                    Tab.Transactions -> TransactionsScreen(
+                    is Page.AccountHistory -> TransactionsScreen(
                         ledger,
                         onOpen = { id ->
                             snackbar.currentSnackbarData?.dismiss()
                             editing = ledger.get(id)
                         },
                         onLog = { adding = true },
+                        account = page.accountId,
+                        onBack = ::back,
                     )
-                    Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true })
-                    Tab.Categories -> CategoriesScreen(ledger, onLog = { adding = true })
-                    else -> Text("${tab.label} is coming soon", Modifier.align(Alignment.Center))
                 }
             }
             if (adding) {

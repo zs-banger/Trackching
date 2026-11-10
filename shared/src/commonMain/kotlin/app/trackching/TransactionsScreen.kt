@@ -31,10 +31,13 @@ import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalTime::class)
 @Composable
-fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () -> Unit) {
+fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () -> Unit,
+                       account: Long? = null,
+                       onBack: (() -> Unit)? = null,) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger) { ledger.history() }.collectAsState(initial = null)
-    val rows = loaded ?: return // still loading: draw nothing for that split second
+    val allRows = loaded ?: return // still loading: draw nothing for that split second
+    val rows = if (account == null) allRows else historyFor(allRows, account)
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
     val days = remember(rows) { groupByDay(rows, zone) }
@@ -48,6 +51,7 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp), // room for the + button
     ) {
+        if (onBack != null) item { BackLink("Accounts", onBack) }
         days.forEach { day ->
             stickyHeader(key = day.date.toString()) {
                 DayHeader(dayLabel(day.date, today), day.net)
