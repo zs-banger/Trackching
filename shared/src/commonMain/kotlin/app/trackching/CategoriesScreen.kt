@@ -11,6 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,6 +41,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
 import androidx.compose.foundation.clickable
 
+
 /** This month's categories: each main with its total, subs indented under it. */
 @OptIn(ExperimentalTime::class)
 @Composable
@@ -42,10 +50,14 @@ fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {
     var kind by rememberSaveable { mutableStateOf("EXPENSE") }
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
-    val (from, until) = remember(today) { monthRange(today, zone) }
+    var back by rememberSaveable { mutableStateOf(0) } // months before this one; 0 = this month
+    val month = remember(today, back) { monthBack(today, back) }
+    val (from, until) = remember(month) { monthRange(month, zone) }
+    val label = if (back == 0) "this month" else "in ${monthTag(month).lowercase().replaceFirstChar { it.uppercase() }}"
     val rows by remember(ledger, kind, from) { ledger.monthTotals(kind, from, until) }
         .collectAsState(initial = emptyList())
     val groups = remember(rows) { groupCategories(rows) }
+    val percents = remember(groups) { mainPercents(groups) }
     var deleting by remember { mutableStateOf<CategoryGroup?>(null) }
     var deletingSub by remember { mutableStateOf<MonthTotals?>(null) }
 
@@ -55,10 +67,21 @@ fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {
     ) {
         item {
             Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f)) { Tag("${today.month.name} ${today.year}") }
+                TextButton(onClick = { back += 1 }) {
+                    Text("‹", color = c.orangeInk, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Tag(monthTag(month)) }
+                TextButton(onClick = { back -= 1 }, enabled = back > 0) {
+                    Text(
+                        "›",
+                        color = if (back > 0) c.orangeInk else c.line,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                }
             }
             SegmentedTabs(
                 options = listOf("EXPENSE", "INCOME"),
@@ -71,16 +94,23 @@ fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {
         if (nothingLogged(groups)) {
             item {
                 EmptyState(
-                    if (kind == "EXPENSE") "No spending this month yet" else "No income this month yet",
+                    if (kind == "EXPENSE") "No spending $label yet" else "No income $label yet",
                     "Log a transaction",
                     onLog,
                     Modifier.padding(horizontal = 16.dp),
                 )
             }
         }
-        items(groups, key = { it.main.id }) { group ->
+        if (!nothingLogged(groups)) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    Donut(categoryShares(groups))
+                }
+            }
+        }
+        itemsIndexed(groups, key = { _, g -> g.main.id }) { i, group ->
             Box(Modifier.fillMaxWidth().background(c.band2)) {
-                CategoryLine(group.main, group.total, onClick = { deleting = group }, bold = true, size = 17.sp)
+                CategoryLine(group.main, group.total, onClick = { deleting = group }, bold = true, size = 17.sp, percent = percents[i])
             }
             // Money logged on a main *before* it got subcategories: show it, so the subs add up.
             if (group.subs.isNotEmpty() && group.main.total != 0L) {
@@ -91,7 +121,6 @@ fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {
             }
         }
     }
-
     deleting?.let { g ->
         DeleteCategorySheet(ledger, g.main.id, g.main.name, hasSubs = g.subs.isNotEmpty(), onDismiss = { deleting = null })
     }
@@ -109,32 +138,63 @@ private fun CategoryLine(
     indent: Boolean = false,
     size: TextUnit = 15.sp,
     nameOverride: String? = null,
+    percent: Int? = null
 ) {
     val c = TrackchingTheme.colors
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(start = if (indent) 40.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(Modifier.size(12.dp).background(Color(row.color)))
-        Text(row.icon, fontSize = size)
-        Text(
-            nameOverride ?: row.name,
-            Modifier.weight(1f),
-            color = c.ink,
-            fontSize = size,
-            fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            shown(formatAmount(total, AmountKind.Transfer)), // no sign: the tab already says Expense or Income
-            color = if (total == 0L) c.ink2 else c.ink,
-            fontSize = size,
-            fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
-        )
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(
+                    start = if (indent) 40.dp else 16.dp,
+                    end = 16.dp,
+                    top = 10.dp,
+                    bottom = 10.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.size(12.dp).background(Color(row.color)))
+            Text(row.icon, fontSize = size)
+            Text(
+                nameOverride ?: row.name,
+                Modifier.weight(1f),
+                color = c.ink,
+                fontSize = size,
+                fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                shown(
+                    formatAmount(
+                        total,
+                        AmountKind.Transfer
+                    )
+                ), // no sign: the tab already says Expense or Income
+                color = if (total == 0L) c.ink2 else c.ink,
+                fontSize = size,
+                fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
+            )
+        }
+        if (percent != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 38.dp, end = 16.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f).height(6.dp).background(c.track)) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(percent / 100f).background(c.orange))
+                }
+                Text(
+                    "$percent%",
+                    Modifier.width(48.dp),
+                    color = c.ink2,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
     }
 }
