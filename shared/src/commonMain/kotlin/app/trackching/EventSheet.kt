@@ -112,7 +112,7 @@ fun EventSheet(ledger: Ledger, onDismiss: () -> Unit, onSaved: () -> Unit) {
 /** The phone's calendar. Material reports the day as UTC midnight, so we read it back in UTC. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalTime::class)
 @Composable
-private fun PickDate(initial: LocalDate, onPicked: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+internal fun PickDate(initial: LocalDate, onPicked: (LocalDate) -> Unit, onDismiss: () -> Unit) {
     val state = rememberDatePickerState(
         initialSelectedDateMillis = initial.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds(),
     )

@@ -5,7 +5,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import app.trackching.db.Txn
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 class TxnFormTest {
 
@@ -132,5 +138,13 @@ class TxnFormTest {
         assertEquals(42L, form.eventFor(42))
         form.tagOff = true
         assertEquals(null, form.eventFor(42))
+    }
+
+    @Test
+    fun pickedDayKeepsTheTimeOfDay() {
+        val zone = TimeZone.of("Asia/Manila")
+        val now = LocalDateTime(2026, 11, 10, 14, 30).toInstant(zone).toEpochMilliseconds()
+        val at = atTimeOfDay(LocalDate(2026, 9, 3), now, zone)
+        assertEquals(LocalDateTime(2026, 9, 3, 14, 30), Instant.fromEpochMilliseconds(at).toLocalDateTime(zone))
     }
 }
