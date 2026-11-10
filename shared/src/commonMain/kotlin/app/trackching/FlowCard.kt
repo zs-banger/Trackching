@@ -37,7 +37,7 @@ fun PeriodChips(selected: Period, onSelect: (Period) -> Unit, modifier: Modifier
  * Tapping a tile picks the matching tab under it.
  */
 @Composable
-fun FlowCard(flow: Flow, running: Boolean, onPickTab: (TypeTab) -> Unit, modifier: Modifier = Modifier) {
+fun FlowCard(flow: Flow, running: Boolean, onPickTab: (TypeTab) -> Unit, modifier: Modifier = Modifier, onOpenAll: (() -> Unit)? = null,) {
     val c = TrackchingTheme.colors
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Tag("Flow", second = "summary")
@@ -48,8 +48,8 @@ fun FlowCard(flow: Flow, running: Boolean, onPickTab: (TypeTab) -> Unit, modifie
             // N transactions · Net
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Text(
-                    "${flow.count} ${if (flow.count == 1) "transaction" else "transactions"}",
-                    Modifier.weight(1f),
+                    "${flow.count} ${if (flow.count == 1) "transaction" else "transactions"}" + if (onOpenAll != null) " ›" else "",
+                    Modifier.weight(1f).then(if (onOpenAll != null) Modifier.clickable(onClick = onOpenAll) else Modifier),
                     color = c.ink2,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,

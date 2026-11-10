@@ -46,7 +46,7 @@ fun <T> SegmentedTabs(
                 Text(
                     label(option).uppercase(),
                     color = if (on) c.onBlue else c.ink,
-                    fontSize = 17.sp,
+                    fontSize = if (options.size > 3) 14.sp else 17.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                 )

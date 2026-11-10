@@ -40,11 +40,17 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
                        fixed: Bucket? = null,
                        startTab: TypeTab = TypeTab.All,
                        backTo: String = "Accounts",
-                       onOpenReports: (() -> Unit)? = null,) {
+                       onOpenReports: (() -> Unit)? = null,
+                       event: Long? = null,) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger) { ledger.history() }.collectAsState(initial = null)
     val allRows = loaded ?: return // still loading: draw nothing for that split second
-    val rows = if (account == null) allRows else historyFor(allRows, account)
+    val eventIds by remember(ledger, event) { ledger.eventTxnIds(event ?: -1) }.collectAsState(initial = null)
+    val rows = when {
+        account != null -> historyFor(allRows, account)
+        event != null -> rowsOfEvent(allRows, (eventIds ?: return).toSet())
+        else -> allRows
+    }
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
     var period by rememberSaveable { mutableStateOf(Period.ThisMonth) }

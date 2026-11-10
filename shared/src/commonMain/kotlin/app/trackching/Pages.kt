@@ -20,6 +20,12 @@ sealed interface Page {
 
     /** Transactions for one bar's period, opened from its Flow summary tiles. */
     data class PeriodHistory(val bucket: Bucket, val tab: TypeTab) : Page
+
+    /** One event's screen. `from` is where Back returns to, for its label ("Events" or "Home"). */
+    data class EventDetail(val id: Long, val from: String) : Page
+
+    /** Transactions for one event, opened from its Flow summary. */
+    data class EventHistory(val eventId: Long, val bucket: Bucket, val tab: TypeTab) : Page
 }
 
 /** "‹ HOME" at the top left of a page. `to` is the screen it goes back to. */
