@@ -4,11 +4,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.trackching.db.Txn
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 private const val OneDayMillis = 24L * 60 * 60 * 1000
 
 /** Which date a transaction gets when saved. `Original` only exists when editing. */
-enum class DateChoice { Original, Today, Yesterday }
+enum class DateChoice { Original, Today, Yesterday, Picked }
 
 /** The state of the transaction sheet, for a new transaction or an edit. */
 class TxnForm(accountId: Long?, val editingId: Long? = null) {
@@ -20,6 +27,7 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
     var accountId by mutableStateOf(accountId)
     var toAccountId by mutableStateOf<Long?>(null)
     var date by mutableStateOf(DateChoice.Today)
+    var pickedDay by mutableStateOf<LocalDate?>(null)
     var originalAt: Long? = null
         private set
 
@@ -62,6 +70,7 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
         DateChoice.Original -> originalAt ?: now
         DateChoice.Today -> now
         DateChoice.Yesterday -> now - OneDayMillis
+        DateChoice.Picked -> pickedDay?.let { atTimeOfDay(it, now) } ?: now
     }
 
     /** The updated row when editing, or null if this is a new transaction or something's missing. */
@@ -101,4 +110,11 @@ fun typedOf(centavos: Long): String {
     val pesos = centavos / 100
     val cents = centavos % 100
     return if (cents == 0L) "$pesos" else "$pesos.${cents.toString().padStart(2, '0')}"
+}
+
+/** That day, at the same clock time as `now`, in the phone's time zone. */
+@OptIn(ExperimentalTime::class)
+fun atTimeOfDay(day: LocalDate, now: Long, zone: TimeZone = TimeZone.currentSystemDefault()): Long {
+    val time = Instant.fromEpochMilliseconds(now).toLocalDateTime(zone).time
+    return LocalDateTime(day, time).toInstant(zone).toEpochMilliseconds()
 }

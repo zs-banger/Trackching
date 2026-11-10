@@ -58,6 +58,7 @@ fun TxnSheet(
     val categories = remember(showAll, categoryKind) {
         ledger.quickCategories(categoryKind, if (showAll) 100L else 8L)
     }
+    var pickingDate by remember { mutableStateOf(false) }
     // Which event this transaction falls in, by its date. Only for new expenses and income.
     val zone = remember { TimeZone.currentSystemDefault() }
     val suggested = remember(form.date) {
@@ -157,6 +158,9 @@ fun TxnSheet(
                     if (originalLabel != "Yesterday") {
                         Chip("Yesterday", selected = form.date == DateChoice.Yesterday, onClick = { form.date = DateChoice.Yesterday })
                     }
+                    val pickedLabel = form.pickedDay?.takeIf { form.date == DateChoice.Picked }
+                        ?.let { dayLabel(it, Clock.System.todayIn(TimeZone.currentSystemDefault())) }
+                    Chip(pickedLabel ?: "Pick a date", selected = form.date == DateChoice.Picked, onClick = { pickingDate = true })
                 }
             }
         }
@@ -194,6 +198,17 @@ fun TxnSheet(
                 }
             },
         )
+        if (pickingDate) {
+            PickDate(
+                initial = form.pickedDay ?: Clock.System.todayIn(TimeZone.currentSystemDefault()),
+                onPicked = { day ->
+                    form.pickedDay = day
+                    form.date = DateChoice.Picked
+                    pickingDate = false
+                },
+                onDismiss = { pickingDate = false },
+            )
+        }
     }
 }
 
