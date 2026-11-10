@@ -12,10 +12,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val database = createDatabase(applicationContext)
+        val version = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
         setContent {
-            TrackchingTheme {
-                AppShell(database)
-            }
+            AppShell(database, version)
         }
     }
 }

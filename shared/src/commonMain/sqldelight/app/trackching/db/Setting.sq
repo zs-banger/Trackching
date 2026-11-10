@@ -10,3 +10,9 @@ SELECT value FROM setting WHERE key = ?;
 -- Insert, or overwrite if the key is already there.
 put:
 INSERT OR REPLACE INTO setting(key, value) VALUES (?, ?);
+
+eraseAll:
+DELETE FROM setting;
+
+countAll:
+SELECT COUNT(*) FROM setting;

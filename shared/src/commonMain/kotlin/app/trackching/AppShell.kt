@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,18 +64,33 @@ enum class Tab(
 
 /** The app: setup on first launch, the tabs after that. */
 @Composable
-fun AppShell(database: TrackchingDatabase) {
+fun AppShell(database: TrackchingDatabase, version: String = "") {
     val ledger = remember(database) { Ledger(database) }
     var setupDone by remember(ledger) { mutableStateOf(ledger.setupDone()) }
-    if (setupDone) {
-        MainShell(ledger)
-    } else {
-        SetupScreen(ledger, onDone = { setupDone = true })
+    var theme by remember(ledger) { mutableStateOf(ledger.theme()) }
+    TrackchingTheme(theme) {
+        if (setupDone) {
+            MainShell(
+                ledger,
+                version = version,
+                theme = theme,
+                onTheme = { theme = it; ledger.setTheme(it) },
+                onErased = { theme = ThemeChoice.System; setupDone = false },
+            )
+        } else {
+            SetupScreen(ledger, onDone = { setupDone = true })
+        }
     }
 }
 
 @Composable
-private fun MainShell(ledger: Ledger) {
+private fun MainShell(
+    ledger: Ledger,
+    version: String,
+    theme: ThemeChoice,
+    onTheme: (ThemeChoice) -> Unit,
+    onErased: () -> Unit,
+) {
     val c = TrackchingTheme.colors
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     var pages by remember { mutableStateOf(listOf<Page>()) }
@@ -90,6 +106,7 @@ private fun MainShell(ledger: Ledger) {
     var addingEvent by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Txn?>(null) }
     var editingEvent by remember { mutableStateOf<EventRow?>(null) }
+    var managingAccounts by remember { mutableStateOf(false) }
 
     // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.
     fun showUndo(message: String, onUndo: () -> Unit) {
@@ -110,8 +127,15 @@ private fun MainShell(ledger: Ledger) {
                         .windowInsetsPadding(WindowInsets.statusBars)
                         .padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
+                    if (tab == Tab.Home && pages.isEmpty()) {
+                        TextButton(onClick = { open(Page.Settings) }) {
+                            Text("⚙", color = c.ink, fontSize = 22.sp)
+                        }
+                    } else {
+                        Spacer(Modifier)
+                    }
                     TextButton(onClick = {
                         hidden = !hidden
                         ledger.setAmountsHidden(hidden)
@@ -199,6 +223,19 @@ private fun MainShell(ledger: Ledger) {
                         onBack = ::back,
                         onOpenAccount = { open(Page.AccountHistory(it.id, it.name)) },
                     )
+                    Page.Settings -> SettingsScreen(
+                        ledger,
+                        version = version,
+                        theme = theme,
+                        onTheme = onTheme,
+                        onBack = ::back,
+                        onManageAccounts = { managingAccounts = true },
+                        onManageCategories = {
+                            pages = emptyList()
+                            tab = Tab.Categories
+                        },
+                        onErased = onErased,
+                    )
                     is Page.AccountHistory -> TransactionsScreen(
                         ledger,
                         onOpen = { id ->
@@ -266,6 +303,9 @@ private fun MainShell(ledger: Ledger) {
                     onDismiss = { addingEvent = false },
                     onSaved = { scope.launch { snackbar.showSnackbar("Event saved") } },
                 )
+            }
+            if (managingAccounts) {
+                ManageAccountsSheet(ledger, onDismiss = { managingAccounts = false })
             }
             val toEdit = editing
             if (toEdit != null) {
