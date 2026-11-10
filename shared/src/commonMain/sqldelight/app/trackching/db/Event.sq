@@ -31,3 +31,13 @@ SELECT id, name FROM event
 WHERE start_date <= :day AND (end_date IS NULL OR end_date >= :day)
 ORDER BY start_date DESC, id DESC
 LIMIT 1;
+
+update:
+UPDATE event SET name = ?, start_date = ?, end_date = ? WHERE id = ?;
+
+delete:
+DELETE FROM event WHERE id = ?;
+
+-- Puts a deleted event back with its old id, for Undo.
+restore:
+INSERT INTO event(id, name, start_date, end_date) VALUES (?, ?, ?, ?);

@@ -572,4 +572,36 @@ class LedgerTest {
         ledger.setAmountsHidden(false)
         assertFalse(ledger.amountsHidden())
     }
+
+    @Test
+    fun eventSpendingCountsSubsUnderTheirMain() {
+        val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        ledger.logExpense(300_00, category("Meals"), cash(), 0, eventId = trip)
+        ledger.logExpense(100_00, category("Jeep & Bus"), cash(), 0, eventId = trip)
+        ledger.logExpense(50_00, category("Coffee"), cash(), 0) // not tagged: doesn't count
+        val spending = db.txnQueries.eventSpending(trip).executeAsList()
+        assertEquals(listOf("Food & Beverages" to 300_00L, "Transportation" to 100_00L), spending.map { it.name to it.total })
+    }
+
+    @Test
+    fun editingAnEventChangesNameAndDates() {
+        val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        ledger.updateEvent(trip, "  Baguio trip ", d(12, 21), null)
+        val e = db.eventQueries.byId(trip).executeAsOne()
+        assertEquals("Baguio trip", e.name)
+        assertEquals("2026-12-21", e.start_date)
+        assertEquals(null, e.end_date)
+    }
+
+    @Test
+    fun deletingAnEventKeepsItsTransactionsAndUndoRetagsThem() {
+        val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        val id = ledger.logExpense(500_00, category("Meals"), cash(), 0, eventId = trip)
+        val deleted = ledger.deleteEvent(trip)!!
+        assertEquals(null, db.eventQueries.byId(trip).executeAsOneOrNull())
+        assertEquals(null, ledger.get(id)!!.event_id) // still there, just untagged
+        ledger.restoreEvent(deleted)
+        assertEquals("Baguio", db.eventQueries.byId(trip).executeAsOne().name)
+        assertEquals(trip, ledger.get(id)!!.event_id)
+    }
 }

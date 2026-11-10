@@ -76,3 +76,23 @@ UPDATE txn SET event_id = ? WHERE id = ?;
 
 movements:
 SELECT kind, centavos, account_id, to_account_id, occurred_at FROM txn;
+
+idsForEvent:
+SELECT id FROM txn WHERE event_id = ?;
+
+-- Before deleting an event: its transactions stay, they just stop being tagged.
+untagEvent:
+UPDATE txn SET event_id = NULL WHERE event_id = ?;
+
+-- An event's spending per main category. A subcategory counts under its main.
+eventSpending:
+SELECT COALESCE(p.id, c.id) AS id,
+       COALESCE(p.name, c.name) AS name,
+       COALESCE(p.color, c.color) AS color,
+       CAST(COALESCE(SUM(t.centavos), 0) AS INTEGER) AS total
+FROM txn t
+JOIN category c ON c.id = t.category_id
+LEFT JOIN category p ON p.id = c.parent_id
+WHERE t.event_id = ? AND t.kind = 'EXPENSE'
+GROUP BY COALESCE(p.id, c.id)
+ORDER BY total DESC;
