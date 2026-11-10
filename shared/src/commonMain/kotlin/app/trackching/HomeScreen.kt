@@ -37,7 +37,7 @@ import kotlinx.datetime.todayIn
 /** Home: balance and accounts, active events, top categories, today. Each section links to its tab. */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEvent: () -> Unit) {
+fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEvent: () -> Unit, onOpenAccounts: () -> Unit) {
     val c = TrackchingTheme.colors
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
@@ -68,7 +68,7 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEv
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         // 1. BALANCE + accounts
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.clickable(role = Role.Button, onClick = onOpenAccounts), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { Tag("Balance") }
                 TextButton(onClick = { managing = true }) {
