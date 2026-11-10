@@ -95,3 +95,6 @@ DELETE FROM category WHERE parent_id = ?;
 
 deleteOne:
 DELETE FROM category WHERE id = ?;
+
+eraseAll:
+DELETE FROM category;

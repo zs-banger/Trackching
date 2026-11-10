@@ -2,6 +2,7 @@ package app.trackching
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.trackching.db.TrackchingDatabase
+import kotlinx.datetime.DayOfWeek
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -603,5 +604,25 @@ class LedgerTest {
         ledger.restoreEvent(deleted)
         assertEquals("Baguio", db.eventQueries.byId(trip).executeAsOne().name)
         assertEquals(trip, ledger.get(id)!!.event_id)
+    }
+
+    @Test
+    fun eraseAllEmptiesEveryTableAndUndoesSetup() {
+        ledger.setAmountsHidden(true)
+        ledger.setTheme(ThemeChoice.Dark)
+        ledger.setWeekStart(DayOfWeek.SUNDAY)
+        val trip = ledger.addEvent("Trip", d(5, 1), null)
+        ledger.logExpense(12_000, category("Meals"), cash(), 0, eventId = trip)
+
+        ledger.eraseAll()
+
+        assertEquals(0L, db.txnQueries.countAll().executeAsOne())
+        assertEquals(0L, db.eventQueries.countAll().executeAsOne())
+        assertEquals(0L, db.categoryQueries.countAll().executeAsOne())
+        assertEquals(0L, db.accountQueries.countAll().executeAsOne())
+        assertEquals(0L, db.settingQueries.countAll().executeAsOne())
+        assertFalse(ledger.setupDone())
+        assertEquals(ThemeChoice.System, ledger.theme())
+        assertEquals(DayOfWeek.MONDAY, ledger.weekStart())
     }
 }

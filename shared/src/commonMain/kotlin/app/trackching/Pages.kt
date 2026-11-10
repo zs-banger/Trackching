@@ -26,6 +26,9 @@ sealed interface Page {
 
     /** Transactions for one event, opened from its Flow summary. */
     data class EventHistory(val eventId: Long, val bucket: Bucket, val tab: TypeTab) : Page
+
+    /** Settings, opened from the gear on Home. */
+    data object Settings : Page
 }
 
 /** "‹ HOME" at the top left of a page. `to` is the screen it goes back to. */
