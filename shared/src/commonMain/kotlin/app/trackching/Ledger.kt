@@ -22,6 +22,7 @@ import app.trackching.db.Movements
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.trackching.db.Event
 import app.trackching.db.EventSpending
+import kotlinx.datetime.DayOfWeek
 
 /** A deleted event and the transactions it had, so Undo can put both back. */
 data class DeletedEvent(val event: Event, val txnIds: List<Long>)
@@ -321,6 +322,36 @@ class Ledger(private val db: TrackchingDatabase) {
 
     fun setAmountsHidden(hidden: Boolean) {
         db.settingQueries.put("amounts_hidden", hidden.toString())
+    }
+
+    fun theme(): ThemeChoice =
+        ThemeChoice.entries.find { it.name == db.settingQueries.get("theme").executeAsOneOrNull() }
+            ?: ThemeChoice.System
+
+    fun setTheme(choice: ThemeChoice) {
+        db.settingQueries.put("theme", choice.name)
+    }
+
+    fun weekStart(): DayOfWeek =
+        if (db.settingQueries.get("week_start").executeAsOneOrNull() == "SUNDAY") DayOfWeek.SUNDAY
+        else DayOfWeek.MONDAY
+
+    fun setWeekStart(day: DayOfWeek) {
+        db.settingQueries.put("week_start", day.name)
+    }
+
+    fun accountCount(): Long = db.accountQueries.countAll().executeAsOne()
+    fun categoryCount(): Long = db.categoryQueries.countAll().executeAsOne()
+
+    /** Erase all data: every transaction, event, category, account and setting. Setup runs again. */
+    fun eraseAll() {
+        db.transaction {
+            db.txnQueries.eraseAll()
+            db.eventQueries.eraseAll()
+            db.categoryQueries.eraseAll()
+            db.accountQueries.eraseAll()
+            db.settingQueries.eraseAll()
+        }
     }
 
     /** True once setup is finished. An app that already has accounts counts as set up. */

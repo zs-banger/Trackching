@@ -10,8 +10,12 @@ import androidx.compose.runtime.ReadOnlyComposable
 
 /** Follows the phone's light/dark setting and hands out Trackching's colors. */
 @Composable
-fun TrackchingTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun TrackchingTheme(choice: ThemeChoice = ThemeChoice.System, content: @Composable () -> Unit) {
+    val dark = when (choice) {
+        ThemeChoice.System -> isSystemInDarkTheme()
+        ThemeChoice.Light -> false
+        ThemeChoice.Dark -> true
+    }
     val brand = if (dark) DarkColors else LightColors
     val base = if (dark) darkColorScheme() else lightColorScheme()
 

@@ -96,3 +96,9 @@ LEFT JOIN category p ON p.id = c.parent_id
 WHERE t.event_id = ? AND t.kind = 'EXPENSE'
 GROUP BY COALESCE(p.id, c.id)
 ORDER BY total DESC;
+
+eraseAll:
+DELETE FROM txn;
+
+countAll:
+SELECT COUNT(*) FROM txn;
