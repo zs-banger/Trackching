@@ -14,6 +14,12 @@ sealed interface Page {
 
     /** Transactions for one account only, opened from Accounts. */
     data class AccountHistory(val accountId: Long, val name: String) : Page
+
+    /** Income vs Expenses, opened from the Reports card on Transactions. */
+    data object IncomeVsExpenses : Page
+
+    /** Transactions for one bar's period, opened from its Flow summary tiles. */
+    data class PeriodHistory(val bucket: Bucket, val tab: TypeTab) : Page
 }
 
 /** "‹ HOME" at the top left of a page. `to` is the screen it goes back to. */
