@@ -36,7 +36,11 @@ import androidx.compose.runtime.setValue
 @Composable
 fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () -> Unit,
                        account: Long? = null,
-                       onBack: (() -> Unit)? = null,) {
+                       onBack: (() -> Unit)? = null,
+                       fixed: Bucket? = null,
+                       startTab: TypeTab = TypeTab.All,
+                       backTo: String = "Accounts",
+                       onOpenReports: (() -> Unit)? = null,) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger) { ledger.history() }.collectAsState(initial = null)
     val allRows = loaded ?: return // still loading: draw nothing for that split second
@@ -44,9 +48,11 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
     var period by rememberSaveable { mutableStateOf(Period.ThisMonth) }
-    var tab by rememberSaveable { mutableStateOf(TypeTab.All) }
+    var tab by rememberSaveable { mutableStateOf(startTab) }
 
-    val inPeriod = remember(rows, period, today) { inRange(rows, periodRange(period, today, zone)) }
+    val range = fixed?.let { it.from to it.until } ?: periodRange(period, today, zone)
+    val running = fixed?.running ?: period.running
+    val inPeriod = remember(rows, range) { inRange(rows, range) }
     val flow = remember(inPeriod) { flowOf(inPeriod) }
     val days = remember(inPeriod, tab) { groupByDay(rowsFor(tab, inPeriod), zone) }
 
@@ -59,11 +65,16 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp), // room for the + button
     ) {
-        if (onBack != null) item { BackLink("Accounts", onBack) }
+        if (onBack != null) item { BackLink(backTo, onBack) }
         item {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                PeriodChips(period, onSelect = { period = it })
-                FlowCard(flow, period, onPickTab = { tab = it })
+                if (fixed == null) {
+                    PeriodChips(period, onSelect = { period = it })
+                } else {
+                    Text(fixed.title.uppercase(), color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+                FlowCard(flow, running, onPickTab = { tab = it })
+                if (onOpenReports != null) ReportsCard(onOpenReports)
             }
         }
         item {
@@ -78,7 +89,7 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
         if (days.isEmpty()) {
             item {
                 Text(
-                    "Nothing here for ${period.label.lowercase()}.",
+                    "Nothing here for ${fixed?.title ?: period.label.lowercase()}.",
                     Modifier.padding(16.dp),
                     color = c.ink2,
                     fontSize = 15.sp,
@@ -142,5 +153,24 @@ internal fun TxnRow(row: History, onClick: () -> Unit) {
             Text(subtitle, color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(shown(amountText), color = amountColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+    }
+}
+
+/** "Reports" with its one link for now. Month in review and Pending join it later. */
+@Composable
+private fun ReportsCard(onOpenIncomeVsExpenses: () -> Unit) {
+    val c = TrackchingTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Tag("Reports")
+        Row(
+            Modifier.fillMaxWidth()
+                .background(c.band)
+                .clickable(onClick = onOpenIncomeVsExpenses)
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Income vs Expenses", Modifier.weight(1f), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("›", color = c.orangeInk, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        }
     }
 }
