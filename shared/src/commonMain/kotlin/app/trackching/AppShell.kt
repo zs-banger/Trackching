@@ -181,6 +181,7 @@ private fun MainShell(ledger: Ledger) {
                                 editing = ledger.get(id)
                             },
                             onLog = { adding = true },
+                            onOpenReports = { open(Page.IncomeVsExpenses) },
                         )
 
                         Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true })
@@ -203,6 +204,23 @@ private fun MainShell(ledger: Ledger) {
                         },
                         onLog = { adding = true },
                         account = page.accountId,
+                        onBack = ::back,
+                    )
+                    Page.IncomeVsExpenses -> IncomeVsExpensesScreen(
+                        ledger,
+                        onBack = ::back,
+                        onOpenPeriod = { bucket, tab -> open(Page.PeriodHistory(bucket, tab)) },
+                    )
+                    is Page.PeriodHistory -> TransactionsScreen(
+                        ledger,
+                        onOpen = { id ->
+                            snackbar.currentSnackbarData?.dismiss()
+                            editing = ledger.get(id)
+                        },
+                        onLog = { adding = true },
+                        fixed = page.bucket,
+                        startTab = page.tab,
+                        backTo = "Income vs Expenses",
                         onBack = ::back,
                     )
                 }
