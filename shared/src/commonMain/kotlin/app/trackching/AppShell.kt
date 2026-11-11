@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.key
 import app.trackching.db.TrackchingDatabase
 import app.trackching.db.Txn
 import kotlinx.coroutines.launch
@@ -68,15 +69,23 @@ fun AppShell(database: TrackchingDatabase, version: String = "") {
     val ledger = remember(database) { Ledger(database) }
     var setupDone by remember(ledger) { mutableStateOf(ledger.setupDone()) }
     var theme by remember(ledger) { mutableStateOf(ledger.theme()) }
+    var generation by remember { mutableStateOf(0) }
     TrackchingTheme(theme) {
         if (setupDone) {
-            MainShell(
-                ledger,
-                version = version,
-                theme = theme,
-                onTheme = { theme = it; ledger.setTheme(it) },
-                onErased = { theme = ThemeChoice.System; setupDone = false },
-            )
+            key(generation) {
+                MainShell(
+                    ledger,
+                    version = version,
+                    theme = theme,
+                    onTheme = { theme = it; ledger.setTheme(it) },
+                    onErased = { theme = ThemeChoice.System; setupDone = false },
+                    onRestored = {
+                        theme = ledger.theme()
+                        setupDone = ledger.setupDone()
+                        generation++
+                    },
+                )
+            }
         } else {
             SetupScreen(ledger, onDone = { setupDone = true })
         }
@@ -90,6 +99,7 @@ private fun MainShell(
     theme: ThemeChoice,
     onTheme: (ThemeChoice) -> Unit,
     onErased: () -> Unit,
+    onRestored: () -> Unit,
 ) {
     val c = TrackchingTheme.colors
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
@@ -235,6 +245,7 @@ private fun MainShell(
                             tab = Tab.Categories
                         },
                         onErased = onErased,
+                        onRestored = onRestored,
                     )
                     is Page.AccountHistory -> TransactionsScreen(
                         ledger,

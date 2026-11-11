@@ -86,3 +86,10 @@ SELECT name FROM account WHERE id = ?;
 
 eraseAll:
 DELETE FROM account;
+
+backupAll:
+SELECT * FROM account ORDER BY id;
+
+backupInsert:
+INSERT INTO account(id, name, type, color, starting_centavos, archived, sort_order)
+VALUES (?, ?, ?, ?, ?, ?, ?);

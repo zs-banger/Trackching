@@ -16,3 +16,6 @@ DELETE FROM setting;
 
 countAll:
 SELECT COUNT(*) FROM setting;
+
+backupAll:
+SELECT * FROM setting ORDER BY key;

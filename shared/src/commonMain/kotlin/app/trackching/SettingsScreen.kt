@@ -27,6 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 
 const val PublicCodeUrl = "https://github.com/zs-banger/Trackching"
 
@@ -40,6 +43,7 @@ fun SettingsScreen(
     onManageAccounts: () -> Unit,
     onManageCategories: () -> Unit,
     onErased: () -> Unit,
+    onRestored: () -> Unit,
 ) {
     val c = TrackchingTheme.colors
     val uri = LocalUriHandler.current
@@ -47,6 +51,35 @@ fun SettingsScreen(
     var confirming by remember { mutableStateOf(false) }
     val accounts = remember(ledger) { ledger.accountCount() }
     val categories = remember(ledger) { ledger.categoryCount() }
+    val zone = TimeZone.currentSystemDefault()
+    val today = Clock.System.todayIn(zone)
+    var last by remember(ledger) { mutableStateOf(ledger.lastBackup()) }
+    var message by remember { mutableStateOf<String?>(null) }      // a refused file, or a failed save
+    var toRestore by remember { mutableStateOf<BackupFile?>(null) } // a good file, waiting for "Restore"
+    var eraseAfter by remember { mutableStateOf(false) }           // "Back up first" was tapped
+
+    val saveBackup = rememberSaveFile("application/json") { saved ->
+        if (saved) {
+            ledger.markBackedUp(today)
+            last = today
+        } else if (eraseAfter) {
+            message = "The backup wasn't saved, so nothing was erased."
+        }
+        if (saved && eraseAfter) confirming = true // back to the erase question, now with a backup
+        eraseAfter = false
+    }
+    fun backUp() = saveBackup(backupFileName(today), encodeBackup(ledger.backupFile(today)))
+
+    val saveCsv = rememberSaveFile("text/csv") { saved ->
+        if (!saved) message = "The CSV wasn't saved."
+    }
+
+    val openFile = rememberOpenFile { text ->
+        when (val result = if (text == null) Opened.Refused(DamagedFile) else openBackup(text)) {
+            is Opened.Ok -> toRestore = result.file
+            is Opened.Refused -> message = result.why
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -78,6 +111,19 @@ fun SettingsScreen(
         LinkRow("Accounts", plural(accounts, "account"), onManageAccounts)
         LinkRow("Categories", plural(categories, "category", "categories"), onManageCategories)
 
+        Group("Backup")
+        LinkRow("Back up now", "Save ›") { backUp() }
+        val lastInfo = lastBackupOf(last, today)
+        Text(
+            "Last backup: ${lastInfo.text}",
+            color = if (lastInfo.overdue) c.orangeInk else c.ink2,
+            fontWeight = if (lastInfo.overdue) FontWeight.Bold else FontWeight.Normal,
+        )
+        LinkRow("Restore", "Pick a file ›") { openFile() }
+        LinkRow("Export CSV", "Save ›") {
+            saveCsv("trackching-transactions-$today.csv", ledger.csv(zone))
+        }
+
         Group("About")
         Text("Your data never leaves this phone.", color = c.ink)
         Text("Version $version", color = c.ink2)
@@ -103,8 +149,49 @@ fun SettingsScreen(
                 }) { Text("Erase", color = c.alert, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { confirming = false }) { Text("Cancel") }
+                Row {
+                    TextButton(onClick = {
+                        confirming = false
+                        eraseAfter = true
+                        backUp()
+                    }) { Text("Back up first") }
+                    TextButton(onClick = { confirming = false }) { Text("Cancel") }
+                }
             },
+        )
+    }
+
+    toRestore?.let { file ->
+        AlertDialog(
+            onDismissRequest = { toRestore = null },
+            title = { Text("Restore this backup?") },
+            text = {
+                Text(
+                    "Made on ${file.createdOn}. It has ${plural(file.accounts.size.toLong(), "account")} " +
+                        "and ${plural(file.txns.size.toLong(), "transaction")}.\n\n" +
+                        "This replaces everything on this phone."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    toRestore = null
+                    try {
+                        ledger.restore(file)
+                        onRestored()
+                    } catch (e: Exception) {
+                        message = DamagedFile
+                    }
+                }) { Text("Restore", color = c.alert, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { toRestore = null }) { Text("Cancel") } },
+        )
+    }
+
+    message?.let { text ->
+        AlertDialog(
+            onDismissRequest = { message = null },
+            text = { Text(text) },
+            confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } },
         )
     }
 }
