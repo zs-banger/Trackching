@@ -626,6 +626,7 @@ class LedgerTest {
         assertEquals(ThemeChoice.System, ledger.theme())
         assertEquals(DayOfWeek.MONDAY, ledger.weekStart())
     }
+
     @Test
     fun backupEraseRestoreGivesBackTheSameData() {
         val trip = ledger.addEvent("Trip", d(5, 1), d(5, 3))
@@ -639,7 +640,7 @@ class LedgerTest {
         val opened = openBackup(text)
         ledger.restore((opened as Opened.Ok).file)
 
-        assertEquals(before, ledger.backupFile(d(5, 4)))   // every table, row for row
+        assertEquals(before.copy(settings = before.settings + ("setup_done" to "true")), ledger.backupFile(d(5, 4)))
         assertTrue(ledger.setupDone())
         assertEquals(ThemeChoice.Dark, ledger.theme())
     }
@@ -662,5 +663,29 @@ class LedgerTest {
         assertEquals("date,type,amount,account,to account,category,subcategory,event", lines[0])
         assertEquals(2, lines.size)
         assertTrue(lines[1].startsWith("1970-01-01,Expense,1232.00,"))
+    }
+
+    @Test
+    fun restoringOnAFreshPhoneFinishesSetup() {
+        ledger.logExpense(12_000, category("Meals"), cash(), 0)
+        val backup = ledger.backupFile(d(5, 4))
+        ledger.eraseAll()
+        assertFalse(ledger.setupDone())
+
+        ledger.restore(backup)
+
+        assertTrue(ledger.setupDone())
+        assertEquals(1L, db.txnQueries.countAll().executeAsOne())
+    }
+
+    @Test
+    fun restoreMarksSetupDoneEvenWithoutTheSetting() {
+        val backup = ledger.backupFile(d(5, 4))
+        val bare = backup.copy(accounts = emptyList(), txns = emptyList(), settings = emptyMap())
+        ledger.eraseAll()
+
+        ledger.restore(bare)
+
+        assertTrue(ledger.setupDone())
     }
 }

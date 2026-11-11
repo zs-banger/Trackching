@@ -388,6 +388,8 @@ class Ledger(private val db: TrackchingDatabase) {
                 db.txnQueries.backupInsert(it.id, it.kind, it.centavos, it.accountId, it.toAccountId, it.categoryId, it.occurredAt, it.eventId)
             }
             file.settings.forEach { (key, value) -> db.settingQueries.put(key, value) }
+
+            db.settingQueries.put("setup_done", "true") // a restored phone never shows setup again
         }
     }
 
