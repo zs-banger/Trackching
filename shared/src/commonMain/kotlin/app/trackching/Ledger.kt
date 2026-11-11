@@ -23,6 +23,7 @@ import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.trackching.db.Event
 import app.trackching.db.EventSpending
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.TimeZone
 
 /** A deleted event and the transactions it had, so Undo can put both back. */
 data class DeletedEvent(val event: Event, val txnIds: List<Long>)
@@ -352,6 +353,67 @@ class Ledger(private val db: TrackchingDatabase) {
             db.accountQueries.eraseAll()
             db.settingQueries.eraseAll()
         }
+    }
+
+    /** Everything in the database, ready to save. */
+    fun backupFile(today: LocalDate): BackupFile = BackupFile(
+        createdOn = today.toString(),
+        accounts = db.accountQueries.backupAll().executeAsList().map {
+            AccountBackup(it.id, it.name, it.type, it.color, it.starting_centavos, it.archived, it.sort_order)
+        },
+        categories = db.categoryQueries.backupAll().executeAsList().map {
+            CategoryBackup(it.id, it.name, it.kind, it.parent_id, it.color, it.sort_order, it.icon)
+        },
+        events = db.eventQueries.backupAll().executeAsList().map {
+            EventBackup(it.id, it.name, it.start_date, it.end_date)
+        },
+        txns = db.txnQueries.backupAll().executeAsList().map {
+            TxnBackup(it.id, it.kind, it.centavos, it.account_id, it.to_account_id, it.category_id, it.occurred_at, it.event_id)
+        },
+        settings = db.settingQueries.backupAll().executeAsList().associate { it.key to it.value_ },
+    )
+
+    /** Replaces everything with the backup. All or nothing: if any row fails, the old data stays. */
+    fun restore(file: BackupFile) {
+        db.transaction {
+            eraseAll()
+            file.accounts.forEach {
+                db.accountQueries.backupInsert(it.id, it.name, it.type, it.color, it.startingCentavos, it.archived, it.sortOrder)
+            }
+            file.categories.forEach {
+                db.categoryQueries.backupInsert(it.id, it.name, it.kind, it.parentId, it.color, it.sortOrder, it.icon)
+            }
+            file.events.forEach { db.eventQueries.restore(it.id, it.name, it.startDate, it.endDate) }
+            file.txns.forEach {
+                db.txnQueries.backupInsert(it.id, it.kind, it.centavos, it.accountId, it.toAccountId, it.categoryId, it.occurredAt, it.eventId)
+            }
+            file.settings.forEach { (key, value) -> db.settingQueries.put(key, value) }
+        }
+    }
+
+    fun lastBackup(): LocalDate? =
+        db.settingQueries.get("last_backup").executeAsOneOrNull()?.let { LocalDate.parse(it) }
+
+    fun markBackedUp(today: LocalDate) {
+        db.settingQueries.put("last_backup", today.toString())
+    }
+
+    /** Every transaction as a spreadsheet, oldest first. */
+    fun csv(zone: TimeZone): String {
+        val header = csvLine(listOf("date", "type", "amount", "account", "to account", "category", "subcategory", "event"))
+        val rows = db.txnQueries.csvRows().executeAsList().map {
+            csvLine(listOf(
+                dayOf(it.occurred_at, zone).toString(),
+                it.kind.lowercase().replaceFirstChar { c -> c.uppercase() },
+                plainAmount(it.centavos),
+                it.account,
+                it.to_account,
+                it.category,
+                it.subcategory,
+                it.event,
+            ))
+        }
+        return (listOf(header) + rows).joinToString("\r\n", postfix = "\r\n")
     }
 
     /** True once setup is finished. An app that already has accounts counts as set up. */
