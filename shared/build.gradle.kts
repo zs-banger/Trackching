@@ -68,6 +68,10 @@ sqldelight {
     databases {
         create("TrackchingDatabase") {
             packageName.set("app.trackching.db")
+            // Snapshots of each released schema version (1.db, 2.db, ...). Committed to git.
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
+            // Fails the build if 1.db + the .sqm migrations don't end up equal to the .sq files.
+            verifyMigrations.set(true)
         }
     }
 }

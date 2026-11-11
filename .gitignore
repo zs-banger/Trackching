@@ -33,3 +33,11 @@ keystore.properties
 *.db-shm
 *.db-wal
 *.trackching-backup
+
+# Real money data
+*.db
+*.db-shm
+*.db-wal
+*.trackching-backup
+# ...except the empty schema snapshots that migrations are checked against
+!shared/src/commonMain/sqldelight/databases/*.db
