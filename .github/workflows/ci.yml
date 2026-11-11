@@ -17,7 +17,11 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4   # 3. set up Gradle + caching
       - run: ./gradlew build               # 4. build, run tests, lint
-      - uses: actions/upload-artifact@v4   # 5. save APK to download
+      - uses: actions/upload-artifact@v4   # 5. dev APK: "Trackching Dev", safe to test with
         with:
-          name: trackching-debug-apk
+          name: trackching-dev-apk
           path: androidApp/build/outputs/apk/debug/*.apk
+      - uses: actions/upload-artifact@v4   # 6. release APK: proves it builds (see README)
+        with:
+          name: trackching-release-apk
+          path: androidApp/build/outputs/apk/release/*.apk

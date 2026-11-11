@@ -36,8 +36,15 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // A separate app next to the everyday one: own icon, own database.
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
         release {
             isMinifyEnabled = false
+            // Until P4-4 sets up a real release key. Fine for your own phone, never for the Play Store.
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
