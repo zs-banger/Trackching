@@ -11,6 +11,7 @@ import kotlin.test.assertTrue
 import kotlin.test.assertFails
 import java.util.Properties
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 class LedgerTest {
 
@@ -624,5 +625,42 @@ class LedgerTest {
         assertFalse(ledger.setupDone())
         assertEquals(ThemeChoice.System, ledger.theme())
         assertEquals(DayOfWeek.MONDAY, ledger.weekStart())
+    }
+    @Test
+    fun backupEraseRestoreGivesBackTheSameData() {
+        val trip = ledger.addEvent("Trip", d(5, 1), d(5, 3))
+        ledger.logExpense(12_345, category("Meals"), cash(), 1_000, eventId = trip)
+        ledger.logIncome(500_000, ledger.mainCategories("INCOME").first().id, cash(), 2_000)
+        ledger.setTheme(ThemeChoice.Dark)
+        val before = ledger.backupFile(d(5, 4))
+
+        val text = encodeBackup(before)
+        ledger.eraseAll()
+        val opened = openBackup(text)
+        ledger.restore((opened as Opened.Ok).file)
+
+        assertEquals(before, ledger.backupFile(d(5, 4)))   // every table, row for row
+        assertTrue(ledger.setupDone())
+        assertEquals(ThemeChoice.Dark, ledger.theme())
+    }
+
+    @Test
+    fun aRestoreThatFailsLeavesTheOldDataAlone() {
+        ledger.logExpense(12_000, category("Meals"), cash(), 0)
+        val before = ledger.backupFile(d(5, 4))
+        val broken = before.copy(txns = before.txns + before.txns.first().copy(id = 999, accountId = 12345))
+
+        assertFails { ledger.restore(broken) }
+
+        assertEquals(before, ledger.backupFile(d(5, 4)))
+    }
+
+    @Test
+    fun csvHasOneRowPerTransactionWithPlainAmounts() {
+        ledger.logExpense(123_200, category("Meals"), cash(), 0)
+        val lines = ledger.csv(TimeZone.UTC).trim().lines()
+        assertEquals("date,type,amount,account,to account,category,subcategory,event", lines[0])
+        assertEquals(2, lines.size)
+        assertTrue(lines[1].startsWith("1970-01-01,Expense,1232.00,"))
     }
 }

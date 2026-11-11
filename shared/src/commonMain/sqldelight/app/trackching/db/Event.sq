@@ -47,3 +47,6 @@ DELETE FROM event;
 
 countAll:
 SELECT COUNT(*) FROM event;
+
+backupAll:
+SELECT * FROM event ORDER BY id;
