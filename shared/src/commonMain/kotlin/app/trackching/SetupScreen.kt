@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,10 +36,18 @@ import androidx.compose.ui.unit.sp
 
 /** First launch only: 1 your first account, 2 starter categories, 3 done. */
 @Composable
-fun SetupScreen(ledger: Ledger, onDone: () -> Unit) {
+fun SetupScreen(ledger: Ledger, onDone: () -> Unit, onRestored: () -> Unit) {
     val c = TrackchingTheme.colors
     val form = remember { SetupForm() }
     var saved by remember { mutableStateOf(false) }
+    var toRestore by remember { mutableStateOf<BackupFile?>(null) } // a good file, waiting for "Restore"
+    var message by remember { mutableStateOf<String?>(null) }      // why a file was refused
+    val openFile = rememberOpenFile { text ->
+        when (val result = if (text == null) Opened.Refused(DamagedFile) else openBackup(text)) {
+            is Opened.Ok -> toRestore = result.file
+            is Opened.Refused -> message = result.why
+        }
+    }
 
     Column(
         Modifier
@@ -69,6 +78,9 @@ fun SetupScreen(ledger: Ledger, onDone: () -> Unit) {
                 1 -> {
                     Text("Start with one account. You can add GCash, banks and more later.", color = c.ink2)
                     AccountFields(form.account)
+                    TextButton(onClick = { openFile() }) {
+                        Text("I have a backup. Restore it", color = c.blue, fontWeight = FontWeight.Bold)
+                    }
                 }
                 2 -> {
                     Text("Untick anything you won't use. You can add your own later on the Categories tab.", color = c.ink2)
@@ -120,6 +132,38 @@ fun SetupScreen(ledger: Ledger, onDone: () -> Unit) {
                 )
             }
         }
+    }
+    toRestore?.let { file ->
+        AlertDialog(
+            onDismissRequest = { toRestore = null },
+            title = { Text("Restore this backup?") },
+            text = {
+                Text(
+                    "Made on ${file.createdOn}. It has ${plural(file.accounts.size.toLong(), "account")} " +
+                        "and ${plural(file.txns.size.toLong(), "transaction")}."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    toRestore = null
+                    try {
+                        ledger.restore(file)
+                        onRestored()
+                    } catch (e: Exception) {
+                        message = DamagedFile
+                    }
+                }) { Text("Restore", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { toRestore = null }) { Text("Cancel") } },
+        )
+    }
+
+    message?.let { text ->
+        AlertDialog(
+            onDismissRequest = { message = null },
+            text = { Text(text) },
+            confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } },
+        )
     }
 }
 

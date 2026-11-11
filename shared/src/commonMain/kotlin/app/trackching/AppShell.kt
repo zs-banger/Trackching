@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +71,7 @@ fun AppShell(database: TrackchingDatabase, version: String = "") {
     var setupDone by remember(ledger) { mutableStateOf(ledger.setupDone()) }
     var theme by remember(ledger) { mutableStateOf(ledger.theme()) }
     var generation by remember { mutableStateOf(0) }
+    var justRestored by remember { mutableStateOf(false) }
     TrackchingTheme(theme) {
         if (setupDone) {
             key(generation) {
@@ -78,16 +80,26 @@ fun AppShell(database: TrackchingDatabase, version: String = "") {
                     version = version,
                     theme = theme,
                     onTheme = { theme = it; ledger.setTheme(it) },
-                    onErased = { theme = ThemeChoice.System; setupDone = false },
+                    onErased = { theme = ThemeChoice.System; justRestored = false; setupDone = false },
                     onRestored = {
                         theme = ledger.theme()
+                        justRestored = true
                         setupDone = ledger.setupDone()
                         generation++
                     },
+                    justRestored = justRestored,
                 )
             }
         } else {
-            SetupScreen(ledger, onDone = { setupDone = true })
+            SetupScreen(
+                ledger,
+                onDone = { justRestored = false; setupDone = true },
+                onRestored = {
+                    theme = ledger.theme()
+                    justRestored = true
+                    setupDone = true
+                },
+            )
         }
     }
 }
@@ -100,6 +112,7 @@ private fun MainShell(
     onTheme: (ThemeChoice) -> Unit,
     onErased: () -> Unit,
     onRestored: () -> Unit,
+    justRestored: Boolean,
 ) {
     val c = TrackchingTheme.colors
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
@@ -111,6 +124,10 @@ private fun MainShell(
     var hidden by remember(ledger) { mutableStateOf(ledger.amountsHidden()) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    // Once per MainShell: right after a restore, say so.
+    LaunchedEffect(Unit) {
+        if (justRestored) snackbar.showSnackbar("Restored from your backup file")
+    }
     var adding by remember { mutableStateOf(false) }
     var addingCategory by remember { mutableStateOf(false) }
     var addingEvent by remember { mutableStateOf(false) }
