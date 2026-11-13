@@ -19,6 +19,7 @@ import kotlinx.datetime.LocalDate
 import app.trackching.db.WithTotals
 import app.trackching.db.ActiveOn
 import app.trackching.db.Movements
+import app.trackching.db.Repeat_rule
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.trackching.db.Event
 import app.trackching.db.EventSpending
@@ -27,6 +28,21 @@ import kotlinx.datetime.TimeZone
 
 /** A deleted event and the transactions it had, so Undo can put both back. */
 data class DeletedEvent(val event: Event, val txnIds: List<Long>)
+
+/** One date a repeat is waiting on. [n] is which time it is (0 = the start date). */
+data class DueRepeat(val n: Int, val date: LocalDate, val rule: Repeat_rule)
+
+/** The saved row as a [RepeatRule]. */
+fun Repeat_rule.toRule() = RepeatRule(
+    every = every.toInt(),
+    unit = RepeatUnit.valueOf(unit),
+    start = LocalDate.parse(start_date),
+    end = when {
+        times != null -> RepeatEnd.After(times.toInt())
+        until_date != null -> RepeatEnd.Until(LocalDate.parse(until_date))
+        else -> RepeatEnd.Never
+    },
+)
 
 class Ledger(private val db: TrackchingDatabase) {
 
@@ -317,6 +333,51 @@ class Ledger(private val db: TrackchingDatabase) {
         deleted.txnIds.forEach { db.txnQueries.setEvent(e.id, it) }
     }
 
+    /** Saves a repeating transaction's rule. Today's transaction is logged separately (P3-2). Returns its id. */
+    fun addRepeat(
+        rule: RepeatRule,
+        kind: String,
+        centavos: Long,
+        accountId: Long,
+        toAccountId: Long?,
+        categoryId: Long?,
+    ): Long {
+        require(centavos > 0) { "An amount must be more than ₱0.00" }
+        val end = rule.end
+        return db.transactionWithResult {
+            db.repeatRuleQueries.insert(
+                rule.every.toLong(), rule.unit.name, rule.start.toString(),
+                (end as? RepeatEnd.After)?.times?.toLong(),
+                (end as? RepeatEnd.Until)?.date?.toString(),
+                kind, centavos, accountId, toAccountId, categoryId,
+            )
+            db.repeatRuleQueries.lastId().executeAsOne()
+        }
+    }
+
+    /** Every date waiting for an OK, across all repeats, oldest first. */
+    fun dueRepeats(today: LocalDate): List<DueRepeat> =
+        db.repeatRuleQueries.allRules().executeAsList()
+            .flatMap { row ->
+                val done = row.done.toInt()
+                row.toRule().due(done, today).mapIndexed { i, date -> DueRepeat(done + i, date, row) }
+            }
+            .sortedBy { it.date }
+
+    /**
+     * Logs one due date as a transaction at [occurredAt] and moves its rule on.
+     * Returns the new transaction's id, or null if that date was already handled (a double tap).
+     */
+    fun saveDue(due: DueRepeat, occurredAt: Long): Long? = db.transactionWithResult {
+        val r = due.rule
+        val moved = db.repeatRuleQueries.moveOn(id = r.id, done = due.n.toLong()).value == 1L
+        if (moved) insert(r.kind, r.centavos, r.account_id, r.to_account_id, r.category_id, occurredAt) else null
+    }
+
+    /** Skips one due date: nothing is logged, and it's never listed again. False if it was already handled. */
+    fun skipDue(due: DueRepeat): Boolean =
+        db.repeatRuleQueries.moveOn(id = due.rule.id, done = due.n.toLong()).value == 1L
+
     /** Whether amounts are hidden (the HIDE ₱ button). Off until you turn it on. */
     fun amountsHidden(): Boolean =
         db.settingQueries.get("amounts_hidden").executeAsOneOrNull() == "true"
@@ -347,6 +408,7 @@ class Ledger(private val db: TrackchingDatabase) {
     /** Erase all data: every transaction, event, category, account and setting. Setup runs again. */
     fun eraseAll() {
         db.transaction {
+            db.repeatRuleQueries.eraseAll()
             db.txnQueries.eraseAll()
             db.eventQueries.eraseAll()
             db.categoryQueries.eraseAll()
@@ -371,6 +433,12 @@ class Ledger(private val db: TrackchingDatabase) {
             TxnBackup(it.id, it.kind, it.centavos, it.account_id, it.to_account_id, it.category_id, it.occurred_at, it.event_id)
         },
         settings = db.settingQueries.backupAll().executeAsList().associate { it.key to it.value_ },
+        repeats = db.repeatRuleQueries.allRules().executeAsList().map {
+            RepeatBackup(
+                it.id, it.every, it.unit, it.start_date, it.times, it.until_date, it.done,
+                it.kind, it.centavos, it.account_id, it.to_account_id, it.category_id,
+            )
+        },
     )
 
     /** Replaces everything with the backup. All or nothing: if any row fails, the old data stays. */
@@ -386,6 +454,12 @@ class Ledger(private val db: TrackchingDatabase) {
             file.events.forEach { db.eventQueries.restore(it.id, it.name, it.startDate, it.endDate) }
             file.txns.forEach {
                 db.txnQueries.backupInsert(it.id, it.kind, it.centavos, it.accountId, it.toAccountId, it.categoryId, it.occurredAt, it.eventId)
+            }
+            file.repeats.forEach {
+                db.repeatRuleQueries.backupInsert(
+                    it.id, it.every, it.unit, it.startDate, it.times, it.untilDate, it.done,
+                    it.kind, it.centavos, it.accountId, it.toAccountId, it.categoryId,
+                )
             }
             file.settings.forEach { (key, value) -> db.settingQueries.put(key, value) }
 
