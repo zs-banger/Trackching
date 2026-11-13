@@ -25,7 +25,6 @@ data class BackupFile(
     val repeats: List<RepeatBackup> = emptyList(),
 )
 
-
 @Serializable
 data class AccountBackup(
     val id: Long, val name: String, val type: String, val color: Long,
