@@ -9,8 +9,8 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Bump this when the file layout changes. Older apps then refuse newer files. */
-const val BackupFormat = 1
+/** Bump this when the file layout changes. Older apps then refuse newer files. 2: repeat rules (P3-1). */
+const val BackupFormat = 2
 
 @Serializable
 data class BackupFile(
@@ -22,7 +22,9 @@ data class BackupFile(
     val events: List<EventBackup>,
     val txns: List<TxnBackup>,
     val settings: Map<String, String>,
+    val repeats: List<RepeatBackup> = emptyList(),
 )
+
 
 @Serializable
 data class AccountBackup(
@@ -43,6 +45,13 @@ data class EventBackup(val id: Long, val name: String, val startDate: String, va
 data class TxnBackup(
     val id: Long, val kind: String, val centavos: Long, val accountId: Long,
     val toAccountId: Long?, val categoryId: Long?, val occurredAt: Long, val eventId: Long?,
+)
+
+@Serializable
+data class RepeatBackup(
+    val id: Long, val every: Long, val unit: String, val startDate: String, val times: Long?,
+    val untilDate: String?, val done: Long, val kind: String, val centavos: Long,
+    val accountId: Long, val toAccountId: Long?, val categoryId: Long?,
 )
 
 private val BackupJson = Json {
