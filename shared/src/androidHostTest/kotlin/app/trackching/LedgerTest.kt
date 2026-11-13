@@ -12,6 +12,8 @@ import kotlin.test.assertFails
 import java.util.Properties
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class LedgerTest {
 
@@ -687,5 +689,76 @@ class LedgerTest {
         ledger.restore(bare)
 
         assertTrue(ledger.setupDone())
+    }
+
+    private fun rent() = ledger.addRepeat(
+        RepeatRule(1, RepeatUnit.MONTH, d(1, 31)), "EXPENSE", 1_500_000, cash(), null, category("Meals"),
+    )
+
+    @Test
+    fun dueRepeatsAreListedOldestFirstAcrossRules() {
+        rent()
+        ledger.addRepeat(RepeatRule(1, RepeatUnit.MONTH, d(2, 15)), "EXPENSE", 50_000, cash(), null, category("Meals"))
+        assertEquals(
+            listOf(d(1, 31), d(2, 15), d(2, 28), d(3, 15), d(3, 31)),
+            ledger.dueRepeats(d(3, 31)).map { it.date },
+        )
+    }
+
+    @Test
+    fun savingADueDateLogsItAndMovesOn() {
+        rent()
+        val first = ledger.dueRepeats(d(3, 31)).first()
+
+        val id = ledger.saveDue(first, 5_000)
+
+        assertEquals(1_500_000L, db.txnQueries.byId(id!!).executeAsOne().centavos)
+        assertEquals(listOf(d(2, 28), d(3, 31)), ledger.dueRepeats(d(3, 31)).map { it.date })
+    }
+
+    @Test
+    fun skippingMovesOnWithoutLogging() {
+        rent()
+        assertTrue(ledger.skipDue(ledger.dueRepeats(d(3, 31)).first()))
+        assertEquals(0L, db.txnQueries.countAll().executeAsOne())
+        assertEquals(d(2, 28), ledger.dueRepeats(d(3, 31)).first().date)
+    }
+
+    @Test
+    fun aDoubleTapLogsOnlyOnce() {
+        rent()
+        val first = ledger.dueRepeats(d(3, 31)).first()
+        assertNotNull(ledger.saveDue(first, 5_000))
+        assertNull(ledger.saveDue(first, 5_000))
+        assertFalse(ledger.skipDue(first))
+        assertEquals(1L, db.txnQueries.countAll().executeAsOne())
+        assertEquals(2, ledger.dueRepeats(d(3, 31)).size)   // Feb 28 and Mar 31, nothing skipped
+    }
+
+    @Test
+    fun backupKeepsRepeatsAndEraseClearsThem() {
+        rent()
+        ledger.skipDue(ledger.dueRepeats(d(3, 31)).first())
+        val before = ledger.backupFile(d(5, 4))
+        assertEquals(1, before.repeats.size)
+
+        ledger.eraseAll()
+        assertEquals(emptyList(), ledger.dueRepeats(d(3, 31)))
+
+        ledger.restore(openBackup(encodeBackup(before)).let { (it as Opened.Ok).file })
+        assertEquals(before.repeats, ledger.backupFile(d(5, 4)).repeats)   // done = 1 came back too
+    }
+
+    @Test
+    fun aFormat1BackupStillRestores() {
+        val old = ledger.backupFile(d(5, 4))
+        val text = encodeBackup(old)
+            .replace("\"format\": 2", "\"format\": 1")
+            .substringBefore(",\n    \"repeats\"") + "\n}"
+        ledger.eraseAll()
+        val opened = openBackup(text)
+        assertTrue(opened is Opened.Ok, "a backup from before P3-1 must still open")
+        ledger.restore((opened as Opened.Ok).file)
+        assertEquals(emptyList(), ledger.backupFile(d(5, 4)).repeats)
     }
 }

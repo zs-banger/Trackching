@@ -1,0 +1,42 @@
+-- One repeating transaction: the rule (see Repeat.kt), how many times are done, and what to log.
+-- every + unit: "every 2 MONTH". start_date / until_date are 'YYYY-MM-DD', like event.
+-- times: set only when it ends after N times. until_date: set only when it ends on a date.
+-- done: how many times were saved or skipped. The next date is time number `done`.
+CREATE TABLE repeat_rule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    every INTEGER NOT NULL CHECK (every >= 1),
+    unit TEXT NOT NULL CHECK (unit IN ('DAY', 'WEEK', 'MONTH', 'YEAR')),
+    start_date TEXT NOT NULL,
+    times INTEGER CHECK (times >= 1),
+    until_date TEXT,
+    done INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL CHECK (kind IN ('EXPENSE', 'INCOME', 'TRANSFER')),
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    account_id INTEGER NOT NULL REFERENCES account(id),
+    to_account_id INTEGER REFERENCES account(id),
+    category_id INTEGER REFERENCES category(id),
+    CHECK (times IS NULL OR until_date IS NULL),
+    CHECK (until_date IS NULL OR until_date >= start_date)
+);
+
+insert:
+INSERT INTO repeat_rule(every, unit, start_date, times, until_date, kind, centavos, account_id, to_account_id, category_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+lastId:
+SELECT last_insert_rowid();
+
+allRules:
+SELECT * FROM repeat_rule ORDER BY id;
+
+-- Moves a rule on by one, only if it's still at :done (decision 5). Changes 0 rows on a double tap.
+moveOn:
+UPDATE repeat_rule SET done = done + 1 WHERE id = :id AND done = :done;
+
+eraseAll:
+DELETE FROM repeat_rule;
+
+-- Puts a rule back exactly, id and done included, for restore.
+backupInsert:
+INSERT INTO repeat_rule(id, every, unit, start_date, times, until_date, done, kind, centavos, account_id, to_account_id, category_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

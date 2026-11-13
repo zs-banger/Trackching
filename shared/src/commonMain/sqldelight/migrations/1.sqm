@@ -1,0 +1,17 @@
+-- Version 1 → 2 (P3-1): repeating transactions.
+CREATE TABLE repeat_rule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    every INTEGER NOT NULL CHECK (every >= 1),
+    unit TEXT NOT NULL CHECK (unit IN ('DAY', 'WEEK', 'MONTH', 'YEAR')),
+    start_date TEXT NOT NULL,
+    times INTEGER CHECK (times >= 1),
+    until_date TEXT,
+    done INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL CHECK (kind IN ('EXPENSE', 'INCOME', 'TRANSFER')),
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    account_id INTEGER NOT NULL REFERENCES account(id),
+    to_account_id INTEGER REFERENCES account(id),
+    category_id INTEGER REFERENCES category(id),
+    CHECK (times IS NULL OR until_date IS NULL),
+    CHECK (until_date IS NULL OR until_date >= start_date)
+);
