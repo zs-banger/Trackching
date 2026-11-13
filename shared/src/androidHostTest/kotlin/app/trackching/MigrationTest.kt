@@ -1,15 +1,14 @@
 package app.trackching
 
-import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import app.trackching.db.TrackchingDatabase
+import kotlinx.datetime.LocalDate
 import java.io.File
 import java.util.Properties
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class MigrationTest {
 
@@ -39,26 +38,17 @@ class MigrationTest {
         driver.execute(null, "INSERT INTO txn(kind, centavos, account_id, occurred_at) VALUES ('EXPENSE', 12000, 1, 0)", 0)
     }
 
-    /** Every (centavos, note) pair in txn, read with plain SQL. */
-    private fun amountsAndNotes(driver: SqlDriver): List<Pair<Long, String?>> =
-        driver.executeQuery(null, "SELECT centavos, note FROM txn", { cursor ->
-            val rows = mutableListOf<Pair<Long, String?>>()
-            while (cursor.next().value) rows += cursor.getLong(0)!! to cursor.getString(1)
-            QueryResult.Value(rows)
-        }, 0).value
-
     @Test
-    fun practiceMigrationAddsAColumnAndKeepsTheTransaction() {
+    fun version1GetsAnEmptyRepeatTable() {
         val driver = openCopyOfVersion1()
         addOneExpense(driver)
 
-        // What a real 1.sqm would hold. Adding a column never touches the rows already there.
-        driver.execute(null, "ALTER TABLE txn ADD COLUMN note TEXT", 0)
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
 
-        val rows = amountsAndNotes(driver)
-        assertEquals(1, rows.size)
-        assertEquals(12_000L, rows.single().first)
-        assertNull(rows.single().second) // old rows get NULL in the new column
+        val db = TrackchingDatabase(driver)
+        assertEquals(emptyList(), db.repeatRuleQueries.allRules().executeAsList())
+        Ledger(db).addRepeat(RepeatRule(1, RepeatUnit.MONTH, LocalDate(2026, 1, 31)), "EXPENSE", 50_000, 1, null, null)
+        assertEquals(1, db.repeatRuleQueries.allRules().executeAsList().size)
     }
 
     @Test
