@@ -37,6 +37,13 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
     /** True after tapping "No event": save without the suggested tag. */
     var tagOff by mutableStateOf(false)
 
+    /** The Repeat row. Only used for new transactions. */
+    val repeat = RepeatForm()
+
+    /** The repeat this transaction came from, when editing. */
+    var repeatId: Long? = null
+        private set
+
     /** The event to save with: the suggestion, unless you turned it off. */
     fun eventFor(suggested: Long?): Long? = if (tagOff) null else suggested
 
@@ -88,6 +95,7 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
             category_id = if (transfer) null else categoryId,
             occurred_at = occurredAt(now),
             event_id = eventId,
+            repeat_id = repeatId,
         )
     }
 
@@ -101,6 +109,7 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
             originalAt = txn.occurred_at
             date = DateChoice.Original
             eventId = txn.event_id
+            repeatId = txn.repeat_id
         }
     }
 }

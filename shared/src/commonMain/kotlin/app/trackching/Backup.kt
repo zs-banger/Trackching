@@ -10,7 +10,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /** Bump this when the file layout changes. Older apps then refuse newer files. 2: repeat rules (P3-1). */
-const val BackupFormat = 2
+const val BackupFormat = 3
 
 @Serializable
 data class BackupFile(
@@ -44,6 +44,7 @@ data class EventBackup(val id: Long, val name: String, val startDate: String, va
 data class TxnBackup(
     val id: Long, val kind: String, val centavos: Long, val accountId: Long,
     val toAccountId: Long?, val categoryId: Long?, val occurredAt: Long, val eventId: Long?,
+    val repeatId: Long? = null,
 )
 
 @Serializable

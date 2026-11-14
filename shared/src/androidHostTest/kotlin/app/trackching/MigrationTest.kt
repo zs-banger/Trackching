@@ -9,6 +9,7 @@ import java.util.Properties
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class MigrationTest {
 
@@ -63,5 +64,15 @@ class MigrationTest {
         val db = TrackchingDatabase(driver)
         assertEquals(1L, db.txnQueries.countAll().executeAsOne())
         assertEquals(12_000L, db.txnQueries.byId(1).executeAsOne().centavos)
+    }
+
+    @Test
+    fun oldTransactionsAreNotFromARepeat() {
+        val driver = openCopyOfVersion1()
+        addOneExpense(driver)
+
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
+
+        assertNull(TrackchingDatabase(driver).txnQueries.byId(1).executeAsOne().repeat_id)
     }
 }

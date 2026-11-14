@@ -20,8 +20,8 @@ CREATE TABLE repeat_rule (
 );
 
 insert:
-INSERT INTO repeat_rule(every, unit, start_date, times, until_date, kind, centavos, account_id, to_account_id, category_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO repeat_rule(every, unit, start_date, times, until_date, done, kind, centavos, account_id, to_account_id, category_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 lastId:
 SELECT last_insert_rowid();
@@ -40,3 +40,17 @@ DELETE FROM repeat_rule;
 backupInsert:
 INSERT INTO repeat_rule(id, every, unit, start_date, times, until_date, done, kind, centavos, account_id, to_account_id, category_id)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+byId:
+SELECT * FROM repeat_rule WHERE id = ?;
+
+-- "This and the next ones": what the next check-ins will log.
+updateTemplate:
+UPDATE repeat_rule SET kind = ?, centavos = ?, account_id = ?, to_account_id = ?, category_id = ? WHERE id = ?;
+
+-- Stop repeating: it ends after the times already handled. Saved transactions keep pointing at it.
+stop:
+UPDATE repeat_rule SET times = MAX(done, 1), until_date = NULL WHERE id = ?;
+
+delete:
+DELETE FROM repeat_rule WHERE id = ?;
