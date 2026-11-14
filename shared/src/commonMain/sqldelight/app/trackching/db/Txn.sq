@@ -6,7 +6,8 @@ CREATE TABLE txn (
     to_account_id INTEGER REFERENCES account(id),
     category_id INTEGER REFERENCES category(id), -- NULL for transfers
     occurred_at INTEGER NOT NULL,
-    event_id INTEGER REFERENCES event(id) -- NULL = not part of an event
+    event_id INTEGER REFERENCES event(id), -- NULL = not part of an event
+    repeat_id INTEGER REFERENCES repeat_rule(id) -- NULL = not from a repeat
 );
 
 -- Makes "newest first" fast even with thousands of rows.
@@ -107,8 +108,8 @@ backupAll:
 SELECT * FROM txn ORDER BY id;
 
 backupInsert:
-INSERT INTO txn(id, kind, centavos, account_id, to_account_id, category_id, occurred_at, event_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO txn(id, kind, centavos, account_id, to_account_id, category_id, occurred_at, event_id, repeat_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- One row per transaction for Export CSV, with names instead of ids.
 csvRows:
@@ -124,3 +125,9 @@ LEFT JOIN category c ON c.id = t.category_id
 LEFT JOIN category p ON p.id = c.parent_id
 LEFT JOIN event e ON e.id = t.event_id
 ORDER BY t.occurred_at, t.id;
+
+setRepeat:
+UPDATE txn SET repeat_id = ? WHERE id = ?;
+
+countForRepeat:
+SELECT COUNT(*) FROM txn WHERE repeat_id = ?;

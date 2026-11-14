@@ -753,12 +753,82 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 2", "\"format\": 1")
+            .replace("\"format\": 3", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
         assertTrue(opened is Opened.Ok, "a backup from before P3-1 must still open")
         ledger.restore((opened as Opened.Ok).file)
         assertEquals(emptyList(), ledger.backupFile(d(5, 4)).repeats)
+    }
+
+    private fun monthlyRent(): Long = ledger.logRepeating(
+        "EXPENSE", 1_500_000, cash(), null, category("Meals"), 1_000, null,
+        RepeatRule(1, RepeatUnit.MONTH, d(1, 31)),
+    )
+
+    @Test
+    fun logRepeatingSavesTodayAndTheRule() {
+        val id = monthlyRent()
+        val txn = db.txnQueries.byId(id).executeAsOne()
+        assertNotNull(txn.repeat_id)
+        // Jan 31 is this transaction, so only the next ones are due.
+        assertEquals(listOf(d(2, 28), d(3, 31)), ledger.dueRepeats(d(3, 31)).map { it.date })
+    }
+
+    @Test
+    fun checkInSavesAreLinkedToTheirRule() {
+        val first = monthlyRent()
+        val ruleId = db.txnQueries.byId(first).executeAsOne().repeat_id
+        val saved = ledger.saveDue(ledger.dueRepeats(d(3, 31)).first(), 2_000)!!
+        assertEquals(ruleId, db.txnQueries.byId(saved).executeAsOne().repeat_id)
+    }
+
+    @Test
+    fun undoRemovesABrandNewRepeat() {
+        ledger.undo(monthlyRent())
+        assertEquals(0L, db.txnQueries.countAll().executeAsOne())
+        assertEquals(emptyList(), ledger.dueRepeats(d(3, 31)))
+    }
+
+    @Test
+    fun undoKeepsARepeatThatHasOtherTransactions() {
+        val ruleId = db.txnQueries.byId(monthlyRent()).executeAsOne().repeat_id!!
+        val saved = ledger.saveDue(ledger.dueRepeats(d(3, 31)).first(), 2_000)!!
+        ledger.undo(saved)
+        assertNotNull(ledger.repeatRule(ruleId))  // Jan 31's transaction still points at it
+    }
+
+    @Test
+    fun onlyThisOneLeavesTheRuleAlone() {
+        val txn = db.txnQueries.byId(monthlyRent()).executeAsOne()
+        ledger.update(txn.copy(centavos = 1_600_000))
+        assertEquals(1_500_000L, ledger.dueRepeats(d(3, 31)).first().rule.centavos)
+    }
+
+    @Test
+    fun thisAndTheNextOnesChangesTheRule() {
+        val txn = db.txnQueries.byId(monthlyRent()).executeAsOne()
+        ledger.updateThisAndNext(txn.copy(centavos = 1_600_000))
+        assertEquals(1_600_000L, db.txnQueries.byId(txn.id).executeAsOne().centavos)
+        assertEquals(1_600_000L, ledger.dueRepeats(d(3, 31)).first().rule.centavos)
+    }
+
+    @Test
+    fun stoppingKeepsWhatsSavedAndEndsTheRest() {
+        val txn = db.txnQueries.byId(monthlyRent()).executeAsOne()
+        ledger.stopRepeat(txn.repeat_id!!)
+        assertEquals(emptyList(), ledger.dueRepeats(d(12, 31)))
+        assertEquals(1L, db.txnQueries.countAll().executeAsOne())
+    }
+
+    @Test
+    fun backupKeepsTheLinkToTheRepeat() {
+        val id = monthlyRent()
+        val before = ledger.backupFile(d(5, 4))
+        ledger.eraseAll()
+        ledger.restore((openBackup(encodeBackup(before)) as Opened.Ok).file)
+        assertNotNull(db.txnQueries.byId(id).executeAsOne().repeat_id)
+        assertEquals(before.repeats, ledger.backupFile(d(5, 4)).repeats)
     }
 }

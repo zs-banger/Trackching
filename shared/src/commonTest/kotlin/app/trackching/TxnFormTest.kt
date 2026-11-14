@@ -83,7 +83,7 @@ class TxnFormTest {
         form.selectKind(AmountKind.Income)
         assertEquals(null, form.categoryId)
     }
-    private val lunch = Txn(7, "EXPENSE", 12_050, 1, null, 3, 1_000, null)
+    private val lunch = Txn(7, "EXPENSE", 12_050, 1, null, 3, 1_000, null, null)
 
     @Test
     fun typedOfMatchesTheKeypad() {
