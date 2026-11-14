@@ -1,0 +1,2 @@
+-- Version 2 → 3 (P3-2): which repeat a transaction came from.
+ALTER TABLE txn ADD COLUMN repeat_id INTEGER REFERENCES repeat_rule(id);

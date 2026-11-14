@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,12 +65,21 @@ fun TxnSheet(
     val suggested = remember(form.date, form.pickedDay) {
         if (editing != null) null else ledger.activeEventOn(dayOf(form.occurredAt(nowMillis()), zone))
     }
+    // The day this transaction falls on: the repeat starts here.
+    val startDay = remember(form.date, form.pickedDay) { dayOf(form.occurredAt(nowMillis()), zone) }
+    // When editing: the repeat it came from, if it's still going.
+    val rule = remember { editing?.repeat_id?.let { ledger.repeatRule(it) } }
+    val repeatActive = rule != null && rule.toRule().next(rule.done.toInt()) != null
+    var stopping by remember { mutableStateOf(false) }
+    var askScope by remember { mutableStateOf<Txn?>(null) }
+    val repeatReady = editing != null || !form.repeat.on || form.repeat.rule(startDay) != null
 
     val hint = when {
         form.centavos == 0L -> "Type the amount"
         form.kind == AmountKind.Transfer && accounts.size < 2 -> "Add a second account to transfer"
         form.kind == AmountKind.Transfer && form.toAccountId == null -> "Pick where it goes"
         form.kind != AmountKind.Transfer && form.categoryId == null -> "Pick a category"
+        !repeatReady -> "Pick when the repeat ends"
         else -> ""
     }
 
@@ -163,33 +173,67 @@ fun TxnSheet(
                     Chip(pickedLabel ?: "Pick a date", selected = form.date == DateChoice.Picked, onClick = { pickingDate = true })
                 }
             }
+            if (editing == null) {
+                Field("Repeat") { RepeatField(form.repeat, startDay) }
+            } else if (repeatActive && rule != null) {
+                Field("Repeat") {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Chip("Keep repeating", selected = !stopping, onClick = { stopping = false })
+                            Chip("Stop repeating", selected = stopping, onClick = { stopping = true })
+                        }
+                        Text(
+                            if (stopping) "No more after this. The ones already saved stay."
+                            else repeatSentence(rule.toRule(), rule.done.toInt()),
+                            color = c.ink2,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
         }
 
         Keypad(
             onKey = form::onKey,
-            saveEnabled = form.canSave && !saved,
+            saveEnabled = form.canSave && repeatReady && !saved,
             onSave = {
                 if (saved) return@Keypad
                 saved = true
                 val now = nowMillis()
                 val edited = form.edited(now)
                 if (edited != null) {
-                    ledger.update(edited)
-                    close()
+                    when {
+                        stopping && rule != null -> {
+                            ledger.update(edited)
+                            ledger.stopRepeat(rule.id)
+                            close()
+                        }
+                        repeatActive -> askScope = edited   // the dialog below finishes the save
+                        else -> {
+                            ledger.update(edited)
+                            close()
+                        }
+                    }
                     return@Keypad
                 }
                 val at = form.occurredAt(now)
                 val account = form.accountId
                 val category = form.categoryId
                 val to = form.toAccountId
+                val repeatRule = form.repeat.rule(startDay)
+                val event = form.eventFor(suggested?.id)
                 val id = when {
                     account == null -> null
+                    repeatRule != null && form.kind == AmountKind.Transfer && to != null ->
+                        ledger.logRepeating("TRANSFER", form.centavos, account, to, null, at, null, repeatRule)
+                    repeatRule != null && form.kind != AmountKind.Transfer && category != null ->
+                        ledger.logRepeating(form.kind.name.uppercase(), form.centavos, account, null, category, at, event, repeatRule)
                     form.kind == AmountKind.Transfer && to != null ->
                         ledger.logTransfer(form.centavos, account, to, at)
                     form.kind == AmountKind.Income && category != null ->
-                        ledger.logIncome(form.centavos, category, account, at, form.eventFor(suggested?.id))
+                        ledger.logIncome(form.centavos, category, account, at, event)
                     form.kind == AmountKind.Expense && category != null ->
-                        ledger.logExpense(form.centavos, category, account, at, form.eventFor(suggested?.id))
+                        ledger.logExpense(form.centavos, category, account, at, event)
                     else -> null
                 }
                 if (id != null) {
@@ -207,6 +251,28 @@ fun TxnSheet(
                     pickingDate = false
                 },
                 onDismiss = { pickingDate = false },
+            )
+        }
+        val pending = askScope
+        if (pending != null) {
+            AlertDialog(
+                onDismissRequest = { askScope = null; saved = false },
+                title = { Text("This transaction repeats") },
+                text = { Text("Change only this one, or this and the next ones?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        ledger.updateThisAndNext(pending)
+                        askScope = null
+                        close()
+                    }) { Text("This and the next ones", fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        ledger.update(pending)
+                        askScope = null
+                        close()
+                    }) { Text("Only this one") }
+                },
             )
         }
     }
