@@ -1085,4 +1085,71 @@ class LedgerTest {
         )
         assertEquals(40_000, active.single().spent)
     }
+
+    // P3-20: changing and deleting runs
+
+    private val utc = TimeZone.UTC
+    private fun spendOn(id: Long, day: LocalDate): Long {
+        val txn = ledger.logExpense(10_000, category("Meals"), cash(), day.atStartOfDayIn(utc).toEpochMilliseconds())
+        ledger.tagEvent(txn, id)
+        return txn
+    }
+    private fun eventOf(txn: Long) = db.txnQueries.byId(txn).executeAsOne().event_id
+
+    @Test
+    fun aRunsDatesCanChange() {
+        val id = trips()
+        val run = runsOf(id).single()
+        ledger.changeRun(run.id, d(3, 9), d(3, 15), utc)
+        assertEquals(d(3, 9) to d(3, 15), runsOf(id).single().let { it.first to it.last })
+        assertEquals(d(3, 9), eventRowOf(db.eventQueries.byId(id).executeAsOne()).start)
+    }
+
+    @Test
+    fun changedDatesMayNotOverlapAnotherRun() {
+        val id = trips()
+        ledger.addRun(id, d(6, 1), d(6, 5))
+        val march = runsOf(id).first()
+        assertFailsWith<IllegalArgumentException> { ledger.changeRun(march.id, d(3, 10), d(6, 1), utc) }
+        ledger.changeRun(march.id, d(3, 12), d(3, 14), utc) // overlapping its own old dates is fine
+    }
+
+    @Test
+    fun shrinkingARunUntagsWhatFallsOutside() {
+        val id = trips()
+        val inside = spendOn(id, d(3, 11))
+        val outside = spendOn(id, d(3, 14))
+        val undo = ledger.changeRun(runsOf(id).single().id, d(3, 10), d(3, 12), utc)
+        assertEquals(listOf(outside), undo.untagged)
+        assertEquals(id, eventOf(inside))
+        assertNull(eventOf(outside))
+        ledger.undoRun(undo)
+        assertEquals(id, eventOf(outside))
+        assertEquals(d(3, 14), runsOf(id).single().last)
+    }
+
+    @Test
+    fun deletingARunUntagsItsTransactionsAndUndoBringsThemBack() {
+        val id = trips()
+        ledger.addRun(id, d(6, 1), d(6, 5))
+        val march = spendOn(id, d(3, 11))
+        val june = spendOn(id, d(6, 2))
+        val undo = ledger.deleteRun(runsOf(id).first().id, utc)
+        assertNull(eventOf(march))
+        assertEquals(id, eventOf(june))
+        assertNotNull(db.txnQueries.byId(march).executeAsOneOrNull()) // still saved
+        assertEquals(d(6, 1), eventRowOf(db.eventQueries.byId(id).executeAsOne()).start)
+
+        ledger.undoRun(undo)
+        assertEquals(2, runsOf(id).size)
+        assertEquals(id, eventOf(march))
+        assertEquals(d(3, 10), eventRowOf(db.eventQueries.byId(id).executeAsOne()).start)
+    }
+
+    @Test
+    fun theOnlyRunCantBeDeleted() {
+        val id = trips()
+        assertFailsWith<IllegalArgumentException> { ledger.deleteRun(runsOf(id).single().id, utc) }
+        assertEquals(1, runsOf(id).size)
+    }
 }

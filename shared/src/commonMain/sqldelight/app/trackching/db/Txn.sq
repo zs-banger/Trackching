@@ -82,6 +82,10 @@ SELECT kind, centavos, account_id, to_account_id, occurred_at FROM txn;
 idsForEvent:
 SELECT id FROM txn WHERE event_id = ?;
 
+-- An event's transactions between two times, for one run (P3-20).
+idsForEventBetween:
+SELECT id FROM txn WHERE event_id = :eventId AND occurred_at >= :from AND occurred_at < :until;
+
 -- Before deleting an event: its transactions stay, they just stop being tagged.
 untagEvent:
 UPDATE txn SET event_id = NULL WHERE event_id = ?;
