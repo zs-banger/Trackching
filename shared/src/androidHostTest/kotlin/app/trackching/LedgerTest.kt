@@ -1683,4 +1683,57 @@ class LedgerTest {
         assertEquals(1, db.creditQueries.allCardPayments().executeAsList().count { it.paid_txn_id != null })
         assertEquals(500_000, owed(bpi))
     }
+
+    // P3-13: pay a credit bill by item
+
+    private fun planOf(bpi: Long) = runBlocking { ledger.cardPlanLines().first().single { it.accountId == bpi } }
+
+    /** ₱10,000 of my own in Cash on hand, so Pay bill has something to pay from. */
+    private fun fund() = ledger.logIncome(1_000_000, ledger.quickCategories("INCOME", 50).first().id, cash(), 1)
+
+    @Test
+    fun payingTwoPlanPaymentsTakesThemOutOfTheCheckIn() {
+        val bpi = card()
+        fund()
+        earphones(bpi)
+        val paid = ledger.payPlan(planOf(bpi).planId, 2, cash(), 2_000)
+        assertEquals(2, paid.payments.size)
+        assertEquals(4, paid.txns.size) // an interest charge and a transfer each
+        assertEquals(600_000 - 200_000, owed(bpi))
+        assertEquals(emptyList(), ledger.dueCardPayments(d(3, 15)))
+        assertEquals("Earphones · 4 of 6 payments left", planOf(bpi).title)
+    }
+
+    @Test
+    fun undoPutsThePaymentsBack() {
+        val bpi = card()
+        fund()
+        earphones(bpi)
+        val before = ledger.balance(cash())
+        ledger.undoBill(ledger.payPlan(planOf(bpi).planId, 2, cash(), 2_000))
+        assertEquals(before, ledger.balance(cash()))
+        assertEquals(600_000, owed(bpi))
+        assertEquals(2, ledger.dueCardPayments(d(3, 15)).size)
+    }
+
+    @Test
+    fun otherChargesAreWhatsOwedBeyondThePlans() {
+        val bpi = card(owed = 10_000)
+        fund()
+        earphones(bpi)
+        ledger.addCharge(bpi, ChargeKind.LateFee, 1_500, 100)
+        assertEquals(11_500, ledger.otherCharges(bpi))
+        assertFailsWith<IllegalArgumentException> { ledger.payOtherCharges(bpi, 11_501, cash(), 200) }
+        ledger.payOtherCharges(bpi, 11_500, cash(), 200)
+        assertEquals(0, ledger.otherCharges(bpi))
+        assertEquals(600_000, owed(bpi))
+    }
+
+    @Test
+    fun payBillNeverUsesMoneyImHolding() {
+        val bpi = card(owed = 10_000)
+        iou(IouKind.HOLDING, "Maria", 100_000) // all ₱1,000 in Cash on hand is Maria's
+        val e = assertFailsWith<IllegalArgumentException> { ledger.payOtherCharges(bpi, 6_000, cash(), 200) }
+        assertEquals(ownMoneyMessage("Cash on hand", 0), e.message)
+    }
 }
