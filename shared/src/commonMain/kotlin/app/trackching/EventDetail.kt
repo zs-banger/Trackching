@@ -10,7 +10,10 @@ import kotlinx.datetime.plus
 
 /** An event row from the database, with its dates read back from 'YYYY-MM-DD'. */
 fun eventRowOf(event: Event): EventRow =
-    EventRow(event.id, event.name, LocalDate.parse(event.start_date), event.end_date?.let(LocalDate::parse), spent = 0)
+    EventRow(
+        event.id, event.name, LocalDate.parse(event.start_date), event.end_date?.let(LocalDate::parse), spent = 0,
+        repeat = eventRepeatOf(event.repeat_every, event.repeat_unit),
+    )
 
 /**
  * The event's dates as a range for Transactions: from the start of its first day
@@ -33,4 +36,6 @@ fun EventForm.loadFrom(event: EventRow) {
     name = event.name
     start = event.start
     end = event.end
+    repeatUnit = event.repeat?.unit
+    repeatEvery = event.repeat?.every ?: 1
 }

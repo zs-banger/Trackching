@@ -8,6 +8,8 @@ import app.trackching.db.MostUsed
 import app.trackching.db.Totals
 import app.trackching.db.TrackchingDatabase
 import app.trackching.db.Iou
+import app.trackching.db.EventSpendingBetween
+import app.trackching.db.ExpensesByEvent
 import app.trackching.db.Iou_payment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -289,13 +291,13 @@ class Ledger(private val db: TrackchingDatabase) {
         }
     }
 
-    /** Saves an event. No end date means it's ongoing. Returns its id. */
-    fun addEvent(name: String, start: LocalDate, end: LocalDate?): Long {
+    /** Saves an event. No end date means it's ongoing. [repeat]: a new period every N days, weeks or months. Returns its id. */
+    fun addEvent(name: String, start: LocalDate, end: LocalDate?, repeat: EventRepeat? = null): Long {
         val clean = name.trim()
         require(clean.isNotEmpty()) { "An event needs a name" }
         require(end == null || end >= start) { "The end date can't be before the start date" }
         return db.transactionWithResult {
-            db.eventQueries.insert(clean, start.toString(), end?.toString())
+            db.eventQueries.insert(clean, start.toString(), end?.toString(), repeat?.every?.toLong(), repeat?.unit?.name)
             db.eventQueries.lastId().executeAsOne()
         }
     }
@@ -325,12 +327,20 @@ class Ledger(private val db: TrackchingDatabase) {
     fun eventSpending(id: Long): Flow<List<EventSpending>> =
         db.txnQueries.eventSpending(id).asFlow().mapToList(Dispatchers.Default)
 
+    /** One period's spending per main category, for a repeating event. */
+    fun eventSpendingBetween(id: Long, from: Long, until: Long): Flow<List<EventSpendingBetween>> =
+        db.txnQueries.eventSpendingBetween(id, from, until).asFlow().mapToList(Dispatchers.Default)
+
+    /** Every expense tagged to an event, for the period totals on the Events list. */
+    fun eventExpenses(): Flow<List<ExpensesByEvent>> =
+        db.eventQueries.expensesByEvent().asFlow().mapToList(Dispatchers.Default)
+
     /** Renames an event or changes its dates. Same rules as adding one. */
-    fun updateEvent(id: Long, name: String, start: LocalDate, end: LocalDate?) {
+    fun updateEvent(id: Long, name: String, start: LocalDate, end: LocalDate?, repeat: EventRepeat? = null) {
         val clean = name.trim()
         require(clean.isNotEmpty()) { "An event needs a name" }
         require(end == null || end >= start) { "The end date can't be before the start date" }
-        db.eventQueries.update(clean, start.toString(), end?.toString(), id)
+        db.eventQueries.update(clean, start.toString(), end?.toString(), repeat?.every?.toLong(), repeat?.unit?.name, id)
     }
 
     /** Deletes an event. Its transactions stay but are untagged. Returns what Undo needs. */
@@ -345,7 +355,7 @@ class Ledger(private val db: TrackchingDatabase) {
     /** Undo for deleteEvent: the event comes back with its old id, and its transactions are tagged again. */
     fun restoreEvent(deleted: DeletedEvent) = db.transaction {
         val e = deleted.event
-        db.eventQueries.restore(e.id, e.name, e.start_date, e.end_date)
+        db.eventQueries.restore(e.id, e.name, e.start_date, e.end_date, e.repeat_every, e.repeat_unit)
         deleted.txnIds.forEach { db.txnQueries.setEvent(e.id, it) }
     }
 
@@ -545,7 +555,7 @@ class Ledger(private val db: TrackchingDatabase) {
             CategoryBackup(it.id, it.name, it.kind, it.parent_id, it.color, it.sort_order, it.icon)
         },
         events = db.eventQueries.backupAll().executeAsList().map {
-            EventBackup(it.id, it.name, it.start_date, it.end_date)
+            EventBackup(it.id, it.name, it.start_date, it.end_date, it.repeat_every, it.repeat_unit)
         },
         txns = db.txnQueries.backupAll().executeAsList().map {
             TxnBackup(it.id, it.kind, it.centavos, it.account_id, it.to_account_id, it.category_id, it.occurred_at, it.event_id, it.repeat_id)
@@ -579,7 +589,7 @@ class Ledger(private val db: TrackchingDatabase) {
             file.categories.forEach {
                 db.categoryQueries.backupInsert(it.id, it.name, it.kind, it.parentId, it.color, it.sortOrder, it.icon)
             }
-            file.events.forEach { db.eventQueries.restore(it.id, it.name, it.startDate, it.endDate) }
+            file.events.forEach { db.eventQueries.restore(it.id, it.name, it.startDate, it.endDate, it.repeatEvery, it.repeatUnit) }
             file.repeats.forEach {
                 db.repeatRuleQueries.backupInsert(
                     it.id, it.every, it.unit, it.startDate, it.times, it.untilDate, it.done,
