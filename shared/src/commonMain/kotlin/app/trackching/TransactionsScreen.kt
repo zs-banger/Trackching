@@ -61,7 +61,12 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
     val range = fixed?.let { it.from to it.until } ?: periodRange(period, today, zone)
     val running = fixed?.running ?: period.running
     val inPeriod = remember(rows, range) { inRange(rows, range) }
-    val flow = remember(inPeriod) { flowOf(inPeriod) }
+    val moves by remember(ledger) { ledger.paymentMoves() }.collectAsState(initial = emptyList())
+    val flow = remember(inPeriod, moves, range, account, event) {
+        val f = flowOf(inPeriod)
+        if (event != null) f // IOU payments are never tagged to an event
+        else iouMovesIn(moves, range, account).let { f.copy(debtPayments = it.debtPayments, handedBack = it.handedBack) }
+    }
     val days = remember(inPeriod, tab) { groupByDay(rowsFor(tab, inPeriod), zone) }
 
     if (rows.isEmpty()) {

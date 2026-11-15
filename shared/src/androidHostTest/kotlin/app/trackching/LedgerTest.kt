@@ -1280,4 +1280,63 @@ class LedgerTest {
         ledger.restore(openBackup(encodeBackup(file)).let { (it as Opened.Ok).file })
         assertEquals(meals, ledger.iouToEdit(id)?.spend?.category_id)
     }
+
+    // P3-9: record a payment or hand money back
+
+    @Test
+    fun aPaymentLowersWhatsLeftAndTheAccount() {
+        val id = iou(IouKind.OWE)
+        val before = ledger.balance(cash())
+        ledger.recordPayment(id, 20_000, 0, cash(), 1)
+        assertEquals(30_000, ledger.iouLeft(id))
+        assertEquals(before - 20_000, ledger.balance(cash()))
+    }
+
+    @Test
+    fun aPaymentReceivedRaisesTheAccount() {
+        val id = iou(IouKind.OWED)
+        val before = ledger.balance(cash())
+        ledger.recordPayment(id, 50_000, 0, cash(), 1)
+        assertEquals(before + 50_000, ledger.balance(cash()))
+        assertTrue(rows(d(2, 1)).single().settled) // settles at zero and moves under Settled
+    }
+
+    @Test
+    fun interestIsSavedAsItsOwnPart() {
+        val id = iou(IouKind.OWE, interest = Interest.Flat(5_000))
+        assertEquals(5_000, ledger.paymentContext(id).interestDue)
+        ledger.recordPayment(id, 20_000, 5_000, cash(), 1)
+        val p = db.iouQueries.paymentsOf(id).executeAsList().single()
+        assertEquals(15_000, p.principal_centavos)
+        assertEquals(5_000, p.interest_centavos)
+        assertEquals(0, ledger.paymentContext(id).interestDue)
+    }
+
+    @Test
+    fun youCantPayMoreThanWhatsLeft() {
+        val id = iou(IouKind.OWE)
+        assertFailsWith<IllegalArgumentException> { ledger.recordPayment(id, 50_001, 0, cash(), 1) }
+    }
+
+    @Test
+    fun paymentsNeverUseMoneyImHolding() {
+        val owe = iou(IouKind.OWE, centavos = 10_000)
+        iou(IouKind.HOLDING, "Maria", 1_000_000)
+        // Spend until only ₱50 of the account is my own; the rest is Maria's.
+        ledger.logExpense(ledger.balance(cash()) - 1_000_000 - 5_000, category("Meals"), cash(), 1)
+        assertEquals(5_000, ledger.ownMoney().getValue(cash()))
+        assertFailsWith<IllegalArgumentException> { ledger.recordPayment(owe, 10_000, 0, cash(), 1) }
+        ledger.recordPayment(owe, 5_000, 0, cash(), 1)
+        assertEquals(5_000, ledger.iouLeft(owe))
+    }
+
+    @Test
+    fun theFlowSummaryShowsDebtPaymentsAndHandedBack() {
+        val owe = iou(IouKind.OWE)
+        val held = iou(IouKind.HOLDING, "Maria", 30_000)
+        ledger.recordPayment(owe, 20_000, 0, cash(), 100)
+        ledger.recordPayment(held, 30_000, 0, cash(), 100)
+        val moves = iouMovesIn(db.iouQueries.paymentMoves().executeAsList(), 0L to 1_000L)
+        assertEquals(IouMoves(debtPayments = 20_000, handedBack = 30_000), moves)
+    }
 }
