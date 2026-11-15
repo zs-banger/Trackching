@@ -55,6 +55,21 @@ markPaid:
 UPDATE credit_installment SET interest_txn_id = :interestTxnId, paid_txn_id = :paidTxnId
 WHERE id = :id AND paid_txn_id IS NULL;
 
+-- P3-13 Pay bill: a plan's payments still waiting, in order.
+waitingOfPlan:
+SELECT * FROM credit_installment WHERE plan_id = ? AND paid_txn_id IS NULL ORDER BY n;
+
+-- The price part still owed on a card's plans. What's owed beyond it is "Other charges".
+waitingPrincipal:
+SELECT CAST(COALESCE(SUM(ci.centavos - ci.interest_centavos), 0) AS INTEGER)
+FROM credit_installment ci
+JOIN credit_plan p ON p.id = ci.plan_id
+WHERE p.account_id = ? AND ci.paid_txn_id IS NULL;
+
+-- Undo of a bill payment: waiting again.
+unmarkPaid:
+UPDATE credit_installment SET interest_txn_id = NULL, paid_txn_id = NULL WHERE id = ?;
+
 eraseAll {
     DELETE FROM credit_installment;
     DELETE FROM credit_plan;

@@ -278,6 +278,7 @@ private fun MainShell(
                             onOpenDueSoon = { open(Page.DueSoon) },
                             onNew = { newIou = it },
                             onOpenIou = { open(Page.IouDetail(it, "IOUs")) },
+                            onBillPaid = { message, paid -> showUndo(message) { ledger.undoBill(paid) } },
                         )
                     }
                     Page.Accounts -> AccountsScreen(
