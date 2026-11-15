@@ -122,4 +122,14 @@ class MigrationTest {
         assertEquals(false, eventRowOf(db.eventQueries.byId(1).executeAsOne()).occasional)
         assertEquals(emptyList(), db.eventQueries.runsOf(1).executeAsList())
     }
+
+    @Test
+    fun oldIousDidntPayForAnything() {
+        val driver = openCopyOfVersion1()
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
+
+        val ledger = Ledger(TrackchingDatabase(driver))
+        val id = ledger.addIou(NewIou(IouKind.OWE, "Juan", 50_000, "", LocalDate(2026, 1, 15)), 1, 0)
+        assertNull(ledger.iouToEdit(id)?.spend)
+    }
 }
