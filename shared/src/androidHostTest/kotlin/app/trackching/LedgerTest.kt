@@ -1152,4 +1152,27 @@ class LedgerTest {
         assertFailsWith<IllegalArgumentException> { ledger.deleteRun(runsOf(id).single().id, utc) }
         assertEquals(1, runsOf(id).size)
     }
+
+    // P3-6: the IOUs tab
+
+    private fun rows(today: LocalDate) = db.iouQueries.iouList().executeAsList().map { it.toRow(today) }
+
+    @Test
+    fun theListWorksOutWhatsLeftWithInterest() {
+        iou(IouKind.OWE, interest = Interest.Flat(5_000))
+        assertEquals(55_000, rows(d(2, 1)).single().left)
+    }
+
+    @Test
+    fun theListNamesThePerson() {
+        iou(IouKind.OWED, "Maria")
+        assertEquals("Maria", rows(d(2, 1)).single().person)
+    }
+
+    @Test
+    fun anIouPastItsDueDateIsOverdue() {
+        ledger.addIou(NewIou(IouKind.OWED, "Juan", 50_000, "", d(1, 15), dueOn = d(2, 15)), cash(), 0)
+        assertFalse(rows(d(2, 15)).single().overdue)
+        assertTrue(rows(d(2, 16)).single().overdue)
+    }
 }
