@@ -1736,4 +1736,52 @@ class LedgerTest {
         val e = assertFailsWith<IllegalArgumentException> { ledger.payOtherCharges(bpi, 6_000, cash(), 200) }
         assertEquals(ownMoneyMessage("Cash on hand", 0), e.message)
     }
+
+    // P3-18: borrow from a credit account
+
+    private fun gloan(bpi: Long): Long {
+        val form = BorrowForm().apply {
+            amount = "5000"; into = cash(); plan.count = 3; plan.each = "1800"; plan.firstDue = d(2, 15)
+        }
+        return ledger.borrow(bpi, form.borrowed, cash(), form.loan()!!, 100)
+    }
+
+    @Test
+    fun aLoanIsATransferNotIncomeAndItsOwed() {
+        val bpi = card()
+        val before = ledger.balance(cash())
+        val txnId = gloan(bpi)
+        assertEquals("TRANSFER", db.txnQueries.byId(txnId).executeAsOne().kind)
+        assertEquals(before + 500_000, ledger.balance(cash()))
+        assertEquals(500_000, owed(bpi))
+        val t = ledger.totals(0, 1_000)
+        assertEquals(0, t.spent)
+        assertEquals(0, t.income)
+        val line = ledger.cardPlanLines().let { runBlocking { it.first() } }.single()
+        assertEquals("Cash loan · 3 of 3 payments left", line.title)
+        assertEquals(40_000, line.interest)
+    }
+
+    @Test
+    fun payingALoanPaymentOnlyCountsItsInterest() {
+        val bpi = card()
+        gloan(bpi)
+        val due = ledger.dueCardPayments(d(2, 15)).single()
+        assertTrue(ledger.payCardPayment(due.id, cash(), 2_000))
+        assertEquals(500_000 - (180_000 - due.interest_centavos), owed(bpi))
+        assertEquals(due.interest_centavos, ledger.totals(1_500, 3_000).spent)
+        ledger.dueCardPayments(d(4, 15)).forEach { ledger.payCardPayment(it.id, cash(), 3_000) }
+        assertEquals(0, owed(bpi))
+    }
+
+    @Test
+    fun aLoanRefusesPaymentsBelowWhatWasBorrowed() {
+        val form = BorrowForm().apply { amount = "5000"; into = cash(); plan.count = 3; plan.each = "1000"; plan.firstDue = d(2, 15) }
+        assertEquals(LoanShort, form.error())
+        assertNull(form.loan())
+        val bpi = card()
+        val plan = NewCardPlan("x", listOf(PlannedPayment(d(2, 15), 100_000, 0)))
+        assertFailsWith<IllegalArgumentException> { ledger.borrow(bpi, 500_000, cash(), plan, 1) }
+        assertFailsWith<IllegalArgumentException> { ledger.borrow(cash(), 100_000, bpi, plan, 1) }
+    }
 }
