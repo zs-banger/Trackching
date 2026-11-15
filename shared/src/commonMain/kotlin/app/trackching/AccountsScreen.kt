@@ -105,7 +105,6 @@ fun AccountsScreen(
         }
 
         worth?.let { NetWorthCard(it) }
-        }
 
         // Balance over time
         val months = remember(today, range) { lastMonths(today, zone, range) }
