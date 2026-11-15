@@ -143,4 +143,25 @@ class MigrationTest {
         assertNull(edit?.spend)
         assertEquals(1L, edit?.money?.account_id)
     }
+
+    @Test
+    fun oldIousAreNotInParts() {
+        val driver = openCopyOfVersion1()
+        addOneExpense(driver)
+        // An IOU from before P3-17 (schema 7): one due date, no installments.
+        TrackchingDatabase.Schema.migrate(driver, 1, 7)
+        driver.execute(null, "INSERT INTO txn(kind, centavos, account_id, occurred_at) VALUES ('IOU', 50000, 1, 0)", 0)
+        driver.execute(null, "INSERT INTO person(name) VALUES ('Juan')", 0)
+        driver.execute(
+            null,
+            "INSERT INTO iou(kind, person_id, centavos, opened_on, due_on, txn_id) VALUES ('OWE', 1, 50000, '2026-01-15', '2026-02-15', 2)",
+            0,
+        )
+
+        TrackchingDatabase.Schema.migrate(driver, 7, TrackchingDatabase.Schema.version)
+
+        val ledger = Ledger(TrackchingDatabase(driver))
+        assertEquals(emptyList(), ledger.iouToEdit(1)?.installments)
+        assertEquals(emptyList(), ledger.dueInstallments(LocalDate(2026, 3, 1)))
+    }
 }
