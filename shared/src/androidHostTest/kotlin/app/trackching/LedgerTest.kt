@@ -831,4 +831,35 @@ class LedgerTest {
         assertNotNull(db.txnQueries.byId(id).executeAsOne().repeat_id)
         assertEquals(before.repeats, ledger.backupFile(d(5, 4)).repeats)
     }
+
+    @Test
+    fun anEditedAmountIsSavedForThisTimeOnly() {
+        rent()
+        val first = ledger.dueRepeats(d(3, 31)).first()
+        val id = ledger.saveDue(first, 5_000, centavos = 1_600_000)!!
+        assertEquals(1_600_000L, db.txnQueries.byId(id).executeAsOne().centavos)
+        assertEquals(1_500_000L, ledger.dueRepeats(d(3, 31)).first().rule.centavos)
+    }
+
+    @Test
+    fun countDueAddsUpEveryRepeat() {
+        rent()
+        ledger.addRepeat(RepeatRule(1, RepeatUnit.MONTH, d(2, 15)), "EXPENSE", 50_000, cash(), null, category("Meals"))
+        assertEquals(5, countDue(db.repeatRuleQueries.allRules().executeAsList(), d(3, 31)))
+    }
+
+    @Test
+    fun comingUpIsTheNextSevenDaysOnly() {
+        rent()   // Jan 31, Feb 28, Mar 31, Apr 30 …
+        val upcoming = ledger.upcomingRepeats(d(3, 25))
+        assertEquals(listOf(d(3, 31)), upcoming.map { it.date })          // not Jan 31 or Feb 28 (due), not Apr 30 (too far)
+        assertEquals(emptyList(), ledger.upcomingRepeats(d(4, 1)).map { it.date })
+    }
+
+    @Test
+    fun labelsUseNames() {
+        val id = rent()
+        val cashName = db.accountQueries.active().executeAsList().first().name
+        assertEquals(RepeatLabel("Meals", cashName), ledger.repeatLabels()[id])
+    }
 }
