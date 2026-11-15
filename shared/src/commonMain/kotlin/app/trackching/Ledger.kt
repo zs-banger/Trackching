@@ -59,6 +59,9 @@ data class IouToEdit(
     val installments: List<Iou_installment> = emptyList(),
 )
 
+/** What Pay bill saved (P3-13), so Undo can take it back. */
+data class BillPaid(val payments: List<Long>, val txns: List<Txn>)
+
 data class DeletedPayment(val payment: Iou_payment, val txn: Txn, val installmentId: Long? = null)
 
 data class DeletedEvent(val event: Event, val txnIds: List<Long>, val runs: List<Event_run> = emptyList())
@@ -923,8 +926,13 @@ class Ledger(private val db: TrackchingDatabase) {
      * So what's owed drops by the principal part. False if it was already paid (a double tap).
      */
     fun payCardPayment(paymentId: Long, fromAccountId: Long, occurredAt: Long): Boolean = db.transactionWithResult {
+        payOne(paymentId, fromAccountId, occurredAt) != null
+    }
+
+    /** Pays one plan payment. Returns the transactions it made, or null if it was already paid. */
+    private fun payOne(paymentId: Long, fromAccountId: Long, occurredAt: Long): List<Long>? {
         val part = db.creditQueries.cardPaymentById(paymentId).executeAsOne()
-        if (part.paid_txn_id != null) return@transactionWithResult false
+        if (part.paid_txn_id != null) return null
         require(!isCredit(fromAccountId)) { "Pay from cash, bank or e-wallet" }
         val accountId = db.creditQueries.planAccount(part.plan_id).executeAsOne()
         val interestTxn = if (part.interest_centavos > 0) {
@@ -932,7 +940,52 @@ class Ledger(private val db: TrackchingDatabase) {
         } else null
         val paid = insert("TRANSFER", part.centavos, fromAccountId, accountId, null, occurredAt, null)
         db.creditQueries.markPaid(interestTxnId = interestTxn, paidTxnId = paid, id = paymentId)
-        true
+        return listOfNotNull(interestTxn, paid)
+    }
+
+    /** P3-13: a plan's payments still waiting, in order, for "Which payments?". */
+    fun waitingPayments(planId: Long): List<Credit_installment> = db.creditQueries.waitingOfPlan(planId).executeAsList()
+
+    /** What's owed on a card beyond its plans' waiting price parts: purchases and fees with no installments. */
+    fun otherCharges(cardId: Long): Long {
+        val owed = db.accountQueries.creditAccounts().executeAsList().firstOrNull { it.id == cardId }?.owedNow ?: 0
+        return (owed - db.creditQueries.waitingPrincipal(cardId).executeAsOne()).coerceAtLeast(0)
+    }
+
+    /** An account's own money: its balance, minus anything held for others (P3-10). */
+    fun ownMoneyOf(accountId: Long): Long = ownMoney()[accountId] ?: balance(accountId)
+
+    /**
+     * Pay bill for a plan (P3-13): its next [count] waiting payments, from [fromAccountId], today.
+     * Each one is saved like the check-in's Save, so they leave the check-in.
+     */
+    fun payPlan(planId: Long, count: Int, fromAccountId: Long, occurredAt: Long): BillPaid = db.transactionWithResult {
+        val parts = waitingPayments(planId).take(count)
+        require(count >= 1 && parts.size == count) { "That is more than these charges" }
+        checkOwnMoney(fromAccountId, parts.sumOf { it.centavos })
+        val txns = parts.flatMap { payOne(it.id, fromAccountId, occurredAt).orEmpty() }
+        BillPaid(parts.map { it.id }, txns.map { db.txnQueries.byId(it).executeAsOne() })
+    }
+
+    /** Pay bill for "Other charges": a transfer to the card, never more than those charges. */
+    fun payOtherCharges(cardId: Long, centavos: Long, fromAccountId: Long, occurredAt: Long): BillPaid = db.transactionWithResult {
+        require(!isCredit(fromAccountId)) { "Pay from cash, bank or e-wallet" }
+        require(centavos <= otherCharges(cardId)) { "That is more than these charges" }
+        checkOwnMoney(fromAccountId, centavos)
+        val id = insert("TRANSFER", centavos, fromAccountId, cardId, null, occurredAt, null)
+        BillPaid(emptyList(), listOf(db.txnQueries.byId(id).executeAsOne()))
+    }
+
+    private fun checkOwnMoney(accountId: Long, centavos: Long) {
+        val own = ownMoneyOf(accountId)
+        val name = db.accountQueries.nameOf(accountId).executeAsOne()
+        require(centavos <= own) { ownMoneyMessage(name, own) }
+    }
+
+    /** Undo of Pay bill: the payments wait again and the transactions go. */
+    fun undoBill(paid: BillPaid) = db.transaction {
+        paid.payments.forEach { db.creditQueries.unmarkPaid(it) }
+        paid.txns.forEach { db.txnQueries.delete(it.id) }
     }
 
     /** Fees & Charges › Interest, Late fee or Annual fee (P3-14). Made if it's not there. */
