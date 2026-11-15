@@ -152,7 +152,9 @@ private fun MainShell(
     var payingIou by remember { mutableStateOf<Long?>(null) }   // Record payment / Payment received / Hand back (P3-9)
     // Once per app start: anything due opens the check-in.
     LaunchedEffect(Unit) {
-        if (ledger.dueRepeats(today).isNotEmpty() || ledger.dueInstallments(today).isNotEmpty()) checkingIn = true
+        if (ledger.dueRepeats(today).isNotEmpty() || ledger.dueInstallments(today).isNotEmpty() || ledger.dueCardPayments(today).isNotEmpty()) {
+            checkingIn = true
+        }
     }
 
     // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.

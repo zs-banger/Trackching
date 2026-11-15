@@ -48,6 +48,7 @@ fun IousScreen(
     val view = remember(rows, kind) { tabOf(rows, kind) }
     val credit by remember(ledger) { ledger.creditAccounts() }.collectAsState(initial = emptyList())
     var charging by remember { mutableStateOf<CreditAccounts?>(null) }
+    val plans by remember(ledger) { ledger.cardPlanLines() }.collectAsState(initial = emptyList())
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
         item(key = "tabs") {
@@ -81,7 +82,9 @@ fun IousScreen(
                     color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 )
             }
-            items(credit, key = { "credit-${it.id}" }) { CreditRow(it, today, onCharge = { charging = it }) }
+            items(credit, key = { "credit-${it.id}" }) { card ->
+                CreditRow(card, today, plans.filter { it.accountId == card.id }, onCharge = { charging = card })
+            }
         }
         if (view.settled.isNotEmpty()) {
             item(key = "settled") {
@@ -116,7 +119,7 @@ private fun newLabel(kind: IouKind) = when (kind) {
 
 /** A card or lender: "₱X owed", when it's due, and the minimum. */
 @Composable
-private fun CreditRow(card: CreditAccounts, today: LocalDate, onCharge: () -> Unit) {
+private fun CreditRow(card: CreditAccounts, today: LocalDate, plans: List<CardPlanLine>, onCharge: () -> Unit) {
     val c = TrackchingTheme.colors
     Row(
         Modifier.fillMaxWidth().background(c.band).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -128,6 +131,19 @@ private fun CreditRow(card: CreditAccounts, today: LocalDate, onCharge: () -> Un
             Text(creditDueLine(card.due_day, today), color = c.ink2, fontSize = 13.sp)
             card.minimum_centavos?.let {
                 Text("Minimum ${shown(formatAmount(it, AmountKind.Transfer))}", color = c.ink2, fontSize = 13.sp)
+            }
+            // P3-15: "Earphones · 3 of 6 payments left", "Next ₱ X on Mar 10 · ₱ Y interest in total"
+            plans.forEach { plan ->
+                Text(plan.title, Modifier.padding(top = 4.dp), color = c.ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                val next = plan.next
+                val nextDue = plan.nextDue
+                if (next != null && nextDue != null) {
+                    Text(
+                        "Next ${shown(formatAmount(next, AmountKind.Transfer))} on ${monthDay(nextDue)} · " +
+                            "${shown(formatAmount(plan.interest, AmountKind.Transfer))} interest in total",
+                        color = c.ink2, fontSize = 13.sp,
+                    )
+                }
             }
         }
         Column(horizontalAlignment = Alignment.End) {

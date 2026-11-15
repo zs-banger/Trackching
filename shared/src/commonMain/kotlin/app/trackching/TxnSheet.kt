@@ -15,6 +15,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -72,7 +75,16 @@ fun TxnSheet(
     val repeatActive = rule != null && rule.toRule().next(rule.done.toInt()) != null
     var stopping by remember { mutableStateOf(false) }
     var askScope by remember { mutableStateOf<Txn?>(null) }
-    val repeatReady = editing != null || !form.repeat.on || form.repeat.rule(startDay) != null
+    // P3-15: an expense on a credit account can be bought in installments.
+    val creditIds = remember { ledger.creditIds() }
+    val cardPlan = remember { CardPlanForm() }
+    var pickingFirstDue by remember { mutableStateOf(false) }
+    val onCredit = editing == null && form.kind == AmountKind.Expense && form.accountId in creditIds
+    val inParts = onCredit && cardPlan.on
+    val categoryName = categories.firstOrNull { it.id == form.categoryId }?.name ?: "Installments"
+    val newPlan = if (inParts) cardPlan.plan(form.centavos, categoryName) else null
+    val repeatReady = editing != null || inParts || !form.repeat.on || form.repeat.rule(startDay) != null
+    val planReady = !inParts || newPlan != null
 
     val hint = when {
         form.centavos == 0L -> "Type the amount"
@@ -80,6 +92,8 @@ fun TxnSheet(
         form.kind == AmountKind.Transfer && form.toAccountId == null -> "Pick where it goes"
         form.kind != AmountKind.Transfer && form.categoryId == null -> "Pick a category"
         !repeatReady -> "Pick when the repeat ends"
+        inParts && cardPlan.error(form.centavos) != null -> cardPlan.error(form.centavos) ?: ""
+        !planReady -> "Fill in the installments"
         else -> ""
     }
 
@@ -139,6 +153,9 @@ fun TxnSheet(
             Field(fromLabel) {
                 AccountChips(accounts, selected = form.accountId, onPick = { form.pickFrom(it) })
             }
+            if (onCredit) {
+                Field("Installments") { CardPlanFields(cardPlan, form.centavos, onPickFirst = { pickingFirstDue = true }) }
+            }
             if (suggested != null && form.kind != AmountKind.Transfer) {
                 Field("Event") {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -173,7 +190,7 @@ fun TxnSheet(
                     Chip(pickedLabel ?: "Pick a date", selected = form.date == DateChoice.Picked, onClick = { pickingDate = true })
                 }
             }
-            if (editing == null) {
+            if (editing == null && !inParts) {
                 Field("Repeat") { RepeatField(form.repeat, startDay) }
             } else if (repeatActive) {
                 Field("Repeat") {
@@ -195,7 +212,7 @@ fun TxnSheet(
 
         Keypad(
             onKey = form::onKey,
-            saveEnabled = form.canSave && repeatReady && !saved,
+            saveEnabled = form.canSave && repeatReady && planReady && !saved,
             onSave = {
                 if (saved) return@Keypad
                 saved = true
@@ -224,6 +241,8 @@ fun TxnSheet(
                 val event = form.eventFor(suggested?.id)
                 val id = when {
                     account == null -> null
+                    inParts && newPlan != null && category != null ->
+                        ledger.buyInInstallments(form.centavos, category, account, at, event, newPlan)
                     repeatRule != null && form.kind == AmountKind.Transfer && to != null ->
                         ledger.logRepeating("TRANSFER", form.centavos, account, to, null, at, null, repeatRule)
                     repeatRule != null && form.kind != AmountKind.Transfer && category != null ->
@@ -253,6 +272,16 @@ fun TxnSheet(
                 onDismiss = { pickingDate = false },
             )
         }
+        if (pickingFirstDue) {
+            PickDate(
+                initial = cardPlan.firstDue ?: Clock.System.todayIn(TimeZone.currentSystemDefault()),
+                onPicked = { day ->
+                    cardPlan.firstDue = day
+                    pickingFirstDue = false
+                },
+                onDismiss = { pickingFirstDue = false },
+            )
+        }
         val pending = askScope
         if (pending != null) {
             AlertDialog(
@@ -275,6 +304,66 @@ fun TxnSheet(
                 },
             )
         }
+    }
+}
+
+/** P3-15: pay in full or in installments, how many, each payment, the first due date, and the preview. */
+@Composable
+private fun CardPlanFields(plan: CardPlanForm, price: Long, onPickFirst: () -> Unit) {
+    val c = TrackchingTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip("Pay in full", selected = !plan.on, onClick = { plan.on = false })
+            Chip("Installments", selected = plan.on, onClick = { plan.on = true })
+        }
+        if (!plan.on) return@Column
+        Text("Type the cost from the lender's app on the keypad.", color = c.ink2, fontSize = 13.sp)
+        OutlinedTextField(
+            value = plan.name,
+            onValueChange = { plan.name = it },
+            label = { Text("What is it? (optional)") },
+            placeholder = { Text("e.g. Earphones") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            CardPlanCounts.forEach { n ->
+                Chip("$n payments", selected = plan.count == n, onClick = { plan.count = n; plan.fitAmounts() })
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip("Same each time", selected = plan.sameEach, onClick = { plan.sameEach = true })
+            Chip("They differ", selected = !plan.sameEach, onClick = { plan.sameEach = false; plan.fitAmounts() })
+        }
+        if (plan.sameEach) {
+            OutlinedTextField(
+                value = plan.each,
+                onValueChange = { plan.each = it },
+                label = { Text("Each payment (₱)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            plan.amounts.indices.forEach { i ->
+                OutlinedTextField(
+                    value = plan.amounts[i],
+                    onValueChange = { plan.amounts[i] = it },
+                    label = { Text("Payment ${i + 1} (₱)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        Text("FIRST PAYMENT DUE", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Chip(plan.firstDue?.let { dateLabel(it) } ?: "Pick a date", selected = plan.firstDue != null, onClick = onPickFirst)
+        val payments = plan.payments
+        if (payments != null && price > 0) {
+            val hidden = LocalAmountsHidden.current
+            Text(cardPlanPreview(payments, price) { masked(it, hidden) }, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(CardPlanNote, color = c.ink2, fontSize = 13.sp)
     }
 }
 
