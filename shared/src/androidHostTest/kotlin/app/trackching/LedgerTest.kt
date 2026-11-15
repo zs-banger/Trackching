@@ -1175,4 +1175,50 @@ class LedgerTest {
         assertFalse(rows(d(2, 15)).single().overdue)
         assertTrue(rows(d(2, 16)).single().overdue)
     }
+
+    // P3-7: an IOU's payments
+
+    /** A payment on an IOU I owe: the money leaves the account. Recording comes with P3-9, so the test does it by hand. */
+    private fun pay(iouId: Long, centavos: Long, day: LocalDate, interest: Long = 0): Long {
+        db.txnQueries.insert(IOU, -centavos, cash(), null, null, day.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds())
+        val txn = db.txnQueries.lastId().executeAsOne()
+        db.iouQueries.insertPayment(iouId, txn, centavos - interest, interest)
+        return db.iouQueries.lastId().executeAsOne()
+    }
+
+    @Test
+    fun anIouShowsItsPersonAndTerms() {
+        val id = iou(IouKind.OWE, "Maria", interest = Interest.Flat(5_000))
+        val detail = db.iouQueries.iouDetail(id).executeAsOne()
+        assertEquals("Maria", detail.person)
+        assertEquals(55_000, detail.leftAfter(emptyList()))
+    }
+
+    @Test
+    fun paymentsAreNewestFirstWithTheirAccount() {
+        val id = iou(IouKind.OWE)
+        val first = pay(id, 10_000, d(2, 1))
+        val second = pay(id, 5_000, d(3, 1), interest = 1_000)
+        val rows = db.iouQueries.paymentRows(id).executeAsList()
+        assertEquals(listOf(second, first), rows.map { it.id })
+        assertEquals(5_000, rows.first().total)
+        assertEquals(db.accountQueries.active().executeAsList().first().name, rows.first().account)
+        assertEquals(35_000, db.iouQueries.iouDetail(id).executeAsOne().leftAfter(rows))
+    }
+
+    @Test
+    fun deletingAPaymentPutsTheAmountBack() {
+        val id = iou(IouKind.OWE)
+        val before = ledger.balance(cash())
+        val payment = pay(id, 10_000, d(2, 1))
+        assertEquals(before - 10_000, ledger.balance(cash()))
+
+        val deleted = assertNotNull(ledger.deletePayment(payment))
+        assertEquals(before, ledger.balance(cash()))
+        assertEquals(50_000, ledger.iouLeft(id))
+
+        ledger.restorePayment(deleted)
+        assertEquals(before - 10_000, ledger.balance(cash()))
+        assertEquals(40_000, ledger.iouLeft(id))
+    }
 }

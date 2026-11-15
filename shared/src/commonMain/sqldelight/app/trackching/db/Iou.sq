@@ -98,3 +98,34 @@ JOIN person p ON p.id = i.person_id
 LEFT JOIN iou_payment ip ON ip.iou_id = i.id
 GROUP BY i.id
 ORDER BY i.id;
+
+-- One IOU with its person's name, for the IOU screen (P3-7).
+iouDetail:
+SELECT i.id, i.kind, p.name AS person, i.centavos, i.what_for, i.opened_on, i.due_on,
+       i.interest_kind, i.interest_value, i.note
+FROM iou i
+JOIN person p ON p.id = i.person_id
+WHERE i.id = ?;
+
+-- An IOU's payments, newest first, with the time and account of the money that moved (P3-7).
+paymentRows:
+SELECT ip.id, ip.txn_id, ip.principal_centavos, ip.interest_centavos, t.occurred_at, a.name AS account
+FROM iou_payment ip
+JOIN txn t ON t.id = ip.txn_id
+JOIN account a ON a.id = t.account_id
+WHERE ip.iou_id = ?
+ORDER BY t.occurred_at DESC, ip.id DESC;
+
+paymentById:
+SELECT * FROM iou_payment WHERE id = ?;
+
+-- Recording payments comes with P3-9; the tests use it already.
+insertPayment:
+INSERT INTO iou_payment(iou_id, txn_id, principal_centavos, interest_centavos) VALUES (?, ?, ?, ?);
+
+deletePayment:
+DELETE FROM iou_payment WHERE id = ?;
+
+-- Puts a payment back with its old id, for Undo.
+restorePayment:
+INSERT INTO iou_payment(id, iou_id, txn_id, principal_centavos, interest_centavos) VALUES (?, ?, ?, ?, ?);
