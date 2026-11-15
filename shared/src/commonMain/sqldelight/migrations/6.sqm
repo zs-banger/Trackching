@@ -1,0 +1,4 @@
+-- P3-8: an IOU can stand for spending ("a friend paid for my lunch").
+-- The spending is a normal expense; spend_txn_id remembers which one, so Edit IOU can change it too.
+-- Old IOUs moved money, so NULL is right for them.
+ALTER TABLE iou ADD COLUMN spend_txn_id INTEGER REFERENCES txn(id);
