@@ -32,9 +32,38 @@ class PaymentTest {
     }
 
     @Test
-    fun youCantPayMoreThanWhatsLeft() {
-        val f = form().apply { amount = "551" }
-        assertEquals("That's more than what's left (₱ 550.00)", f.error)
+    fun youCantHandBackMoreThanWhatsLeft() {
+        val f = form(IouKind.HOLDING, left = 50_000, interestDue = 0).apply { amount = "501" }
+        assertEquals("That's more than what's left (₱ 500.00)", f.error)
+        assertEquals(0, f.extra) // never offered on Holding
+    }
+
+    // P3-16: extra paid counts as interest
+
+    @Test
+    fun payingMoreAsksWhetherItsInterest() {
+        val f = form(IouKind.OWED, left = 50_000, interestDue = 0).apply { amount = "520" }
+        assertEquals(2_000, f.extra)
+        assertEquals("₱ 20.00 more than they owe. Count it as interest?", f.extraQuestion)
+        assertFalse(f.canSave) // not answered yet
+        f.countExtra = true
+        assertTrue(f.canSave)
+        assertEquals(50_000, f.onIou) // the IOU only gets what was left
+    }
+
+    @Test
+    fun noCapsThePaymentAtWhatsLeft() {
+        val f = form(IouKind.OWED, left = 50_000, interestDue = 0).apply { amount = "520" }
+        f.capAtLeft()
+        assertEquals(50_000, f.centavos)
+        assertEquals(0, f.extra)
+        assertTrue(f.canSave)
+    }
+
+    @Test
+    fun whenIOweItSaysYouOwe() {
+        val f = form(left = 50_000, interestDue = 0).apply { amount = "510" }
+        assertEquals("₱ 10.00 more than you owe. Count it as interest?", f.extraQuestion)
     }
 
     @Test
