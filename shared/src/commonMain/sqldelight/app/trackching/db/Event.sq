@@ -4,8 +4,8 @@ CREATE TABLE event (
     name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     start_date TEXT NOT NULL,
     end_date TEXT, -- NULL = ongoing, no end yet
-    repeat_every INTEGER CHECK (repeat_every IS NULL OR repeat_every >= 1), -- NULL = doesn't repeat
-    repeat_unit TEXT CHECK (repeat_unit IS NULL OR repeat_unit IN ('DAY', 'WEEK', 'MONTH')),
+    repeat_every INTEGER, -- NULL = doesn't repeat. Rules are in EventRepeat (see 4.sqm)
+    repeat_unit TEXT,     -- 'DAY', 'WEEK' or 'MONTH'
     CHECK (end_date IS NULL OR end_date >= start_date)
 );
 
@@ -40,6 +40,7 @@ UPDATE event SET name = ?, start_date = ?, end_date = ?, repeat_every = ?, repea
 delete:
 DELETE FROM event WHERE id = ?;
 
+-- Puts a deleted event back with its old id, for Undo.
 restore:
 INSERT INTO event(id, name, start_date, end_date, repeat_every, repeat_unit) VALUES (?, ?, ?, ?, ?, ?);
 
