@@ -662,7 +662,7 @@ class LedgerTest {
     fun csvHasOneRowPerTransactionWithPlainAmounts() {
         ledger.logExpense(123_200, category("Meals"), cash(), 0)
         val lines = ledger.csv(TimeZone.UTC).trim().lines()
-        assertEquals("date,type,amount,account,to account,category,subcategory,event", lines[0])
+        assertEquals("date,type,amount,account,to account,category,subcategory,event,person", lines[0])
         assertEquals(2, lines.size)
         assertTrue(lines[1].startsWith("1970-01-01,Expense,1232.00,"))
     }
@@ -753,7 +753,7 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 3", "\"format\": 1")
+            .replace("\"format\": 4", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
@@ -861,5 +861,85 @@ class LedgerTest {
         val id = rent()
         val cashName = db.accountQueries.active().executeAsList().first().name
         assertEquals(RepeatLabel("Meals", cashName), ledger.repeatLabels()[id])
+    }
+
+    // P3-5: IOUs
+
+    private fun iou(kind: IouKind, person: String = "Juan", centavos: Long = 50_000, interest: Interest = Interest.None) =
+        ledger.addIou(NewIou(kind, person, centavos, "Lunch money", d(1, 15), interest = interest), cash(), 0)
+
+    @Test
+    fun borrowingRaisesTheAccountButIsNotIncome() {
+        val before = ledger.balance(cash())
+        iou(IouKind.OWE)
+        assertEquals(before + 50_000, ledger.balance(cash()))
+        assertEquals(0, ledger.totals(0, Long.MAX_VALUE).income)
+    }
+
+    @Test
+    fun lendingLowersTheAccountButIsNotSpending() {
+        val before = ledger.balance(cash())
+        iou(IouKind.OWED)
+        assertEquals(before - 50_000, ledger.balance(cash()))
+        assertEquals(0, ledger.totals(0, Long.MAX_VALUE).spent)
+    }
+
+    @Test
+    fun holdingMoneyIsNotIncome() {
+        val before = ledger.balance(cash())
+        iou(IouKind.HOLDING)
+        assertEquals(before + 50_000, ledger.balance(cash()))
+        assertEquals(0, ledger.totals(0, Long.MAX_VALUE).income)
+    }
+
+    @Test
+    fun holdingMoneyNeverHasInterest() {
+        val before = db.txnQueries.countAll().executeAsOne()
+        assertFailsWith<IllegalArgumentException> { iou(IouKind.HOLDING, interest = Interest.Flat(1_000)) }
+        assertEquals(before, db.txnQueries.countAll().executeAsOne()) // nothing half-saved
+    }
+
+    @Test
+    fun namesAreRememberedOnceAndSuggested() {
+        iou(IouKind.OWE, "Juan")
+        iou(IouKind.OWED, "  juan ")
+        iou(IouKind.OWED, "Maria")
+        assertEquals(listOf("Juan"), ledger.personNames("ju"))
+        assertEquals(listOf("Maria", "Juan"), ledger.personNames("")) // most recent first
+        assertEquals(2, db.iouQueries.backupPeople().executeAsList().size)
+    }
+
+    @Test
+    fun aNewIouHasEverythingLeft() {
+        val id = iou(IouKind.OWE, interest = Interest.Flat(5_000))
+        assertEquals(55_000, ledger.iouLeft(id))
+    }
+
+    @Test
+    fun iouMoneyStaysOutOfTheListUntilP3_8() {
+        iou(IouKind.OWE)
+        assertEquals(0, db.txnQueries.history().executeAsList().size)
+    }
+
+    @Test
+    fun iousAreBackedUpAndRestored() {
+        val id = iou(IouKind.OWE, interest = Interest.Flat(5_000))
+        val balance = ledger.balance(cash())
+        val before = ledger.backupFile(d(5, 4))
+
+        ledger.eraseAll()
+        ledger.restore(openBackup(encodeBackup(before)).let { (it as Opened.Ok).file })
+
+        assertEquals(before.ious, ledger.backupFile(d(5, 4)).ious)
+        assertEquals(55_000, ledger.iouLeft(id))
+        assertEquals(balance, ledger.balance(cash()))
+    }
+
+    @Test
+    fun csvNamesThePerson() {
+        iou(IouKind.OWE)
+        val line = ledger.csv(TimeZone.UTC).trim().lines()[1]
+        assertTrue(line.startsWith("1970-01-01,IOU,500.00,"))
+        assertTrue(line.endsWith(",Juan"))
     }
 }
