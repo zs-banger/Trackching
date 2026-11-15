@@ -47,3 +47,18 @@ enum class ChargeKind(val label: String) { Interest("Interest"), LateFee("Late f
 
 /** The Add charge sheet's note. */
 fun chargeNote(card: String): String = "Saved as an expense under Fees & Charges, and added to what you owe on $card."
+
+/** "GCash only has ₱ 500.00 of your own money" (P3-13). */
+fun ownMoneyMessage(account: String, own: Long): String =
+    "$account only has ${formatAmount(own.coerceAtLeast(0), AmountKind.Transfer)} of your own money"
+
+/** Pay bill's one message, or null when it can be paid. */
+fun billError(centavos: Long, charges: Long, account: String?, own: Long?): String? = when {
+    centavos > charges -> "That is more than these charges"
+    account != null && own != null && centavos > own -> ownMoneyMessage(account, own)
+    else -> null
+}
+
+/** The toast after paying a plan: "Payments 4–5 of Earphones paid", or "Payment 4 of Earphones paid". */
+fun planPaidMessage(name: String, first: Long, last: Long): String =
+    if (first == last) "Payment $first of $name paid" else "Payments $first–$last of $name paid"

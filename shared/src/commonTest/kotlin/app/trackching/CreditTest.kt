@@ -86,4 +86,17 @@ class CreditTest {
         "Saved as an expense under Fees & Charges, and added to what you owe on BPI Card.",
         chargeNote("BPI Card"),
     )
+
+    @Test
+    fun payBillRefusesMoreThanTheChargesOrYourOwnMoney() {
+        assertEquals("That is more than these charges", billError(10_001, 10_000, "GCash", 50_000))
+        assertEquals("GCash only has ₱ 50.00 of your own money", billError(6_000, 10_000, "GCash", 5_000))
+        assertNull(billError(5_000, 10_000, "GCash", 5_000))
+    }
+
+    @Test
+    fun theToastSaysWhichPaymentsWerePaid() {
+        assertEquals("Payments 4–5 of Earphones paid", planPaidMessage("Earphones", 4, 5))
+        assertEquals("Payment 4 of Earphones paid", planPaidMessage("Earphones", 4, 4))
+    }
 }
