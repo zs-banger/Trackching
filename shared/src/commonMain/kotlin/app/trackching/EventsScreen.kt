@@ -35,13 +35,15 @@ fun EventsScreen(ledger: Ledger, onNewEvent: () -> Unit, onOpenEvent: (Long) -> 
     val c = TrackchingTheme.colors
     val loaded by remember(ledger) { ledger.eventsWithTotals() }.collectAsState(initial = null)
     val loadedExpenses by remember(ledger) { ledger.eventExpenses() }.collectAsState(initial = null)
+    val loadedRuns by remember(ledger) { ledger.allRuns() }.collectAsState(initial = null)
     val rows = loaded ?: return // still loading
     val expenses = loadedExpenses ?: return
+    val runs = loadedRuns ?: return
     val zone = remember { TimeZone.currentSystemDefault() }
     val today = Clock.System.todayIn(zone)
     val weekStart = remember(ledger) { ledger.weekStart() }
-    val sections = remember(rows, expenses, today) {
-        splitEvents(rows, today).mapValues { (_, events) -> withPeriodTotals(events, expenses, today, weekStart, zone) }
+    val sections = remember(rows, expenses, runs, today) {
+        splitEvents(rows, today, runs).mapValues { (_, events) -> withPeriodTotals(events, expenses, today, weekStart, zone) }
     }
 
     if (rows.isEmpty()) {

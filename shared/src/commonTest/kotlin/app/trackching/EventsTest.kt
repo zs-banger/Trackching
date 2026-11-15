@@ -23,11 +23,11 @@ class EventsTest {
     @Test
     fun sectionsAreSortedTheUsefulWay() {
         val rows = listOf(
-            WithTotals(1, "Christmas", "2026-12-24", "2026-12-25", null, null, 0),
-            WithTotals(2, "Baguio", "2026-12-20", "2026-12-23", null, null, 0),
-            WithTotals(3, "Halloween", "2026-10-31", "2026-10-31", null, null, 0),
-            WithTotals(4, "Boracay", "2026-08-01", "2026-08-05", null, null, 0),
-            WithTotals(5, "Laptop fund", "2026-11-01", null, null, null, 15_000),
+            WithTotals(1, "Christmas", "2026-12-24", "2026-12-25", null, null, 0, 0),
+            WithTotals(2, "Baguio", "2026-12-20", "2026-12-23", null, null, 0, 0),
+            WithTotals(3, "Halloween", "2026-10-31", "2026-10-31", null, null, 0, 0),
+            WithTotals(4, "Boracay", "2026-08-01", "2026-08-05", null, null, 0, 0),
+            WithTotals(5, "Laptop fund", "2026-11-01", null, null, null, 0, 15_000),
         )
         val split = splitEvents(rows, today)
         assertEquals(listOf("Laptop fund"), split.getValue(EventStatus.Active).map { it.name })

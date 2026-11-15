@@ -1,0 +1,11 @@
+-- Version 5 → 6 (P3-19): occasional events, with their own runs of dates.
+-- Old events get occasional = 0, so they stay exactly as they were.
+ALTER TABLE event ADD COLUMN occasional INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE event_run (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES event(id),
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    CHECK (end_date >= start_date)
+);

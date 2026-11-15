@@ -20,8 +20,8 @@ class EventDetailTest {
 
     @Test
     fun readsTheDatesBack() {
-        assertEquals(trip.copy(spent = 0), eventRowOf(Event(1, "Baguio", "2026-12-20", "2026-12-23", null, null)))
-        assertEquals(null, eventRowOf(Event(2, "Fund", "2026-11-01", null, null, null)).end)
+        assertEquals(trip.copy(spent = 0), eventRowOf(Event(1, "Baguio", "2026-12-20", "2026-12-23", null, null, 0)))
+        assertEquals(null, eventRowOf(Event(2, "Fund", "2026-11-01", null, null, null, 0)).end)
     }
 
     @Test
