@@ -1,0 +1,3 @@
+-- P3-12: credit accounts. The type CREDIT was allowed from the start; these are its two optional terms.
+ALTER TABLE account ADD COLUMN due_day INTEGER CHECK (due_day BETWEEN 1 AND 31);
+ALTER TABLE account ADD COLUMN minimum_centavos INTEGER CHECK (minimum_centavos >= 0);
