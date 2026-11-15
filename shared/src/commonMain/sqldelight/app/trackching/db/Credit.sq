@@ -1,0 +1,73 @@
+-- Credit plans (P3-15): something bought in installments on a credit account. See 9.sqm
+CREATE TABLE credit_plan (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL REFERENCES account(id),
+    name TEXT NOT NULL,
+    principal_centavos INTEGER NOT NULL CHECK (principal_centavos > 0),
+    txn_id INTEGER -- the purchase (P3-15). No REFERENCES: deleting it from the history must still work
+);
+
+CREATE TABLE credit_installment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL REFERENCES credit_plan(id),
+    n INTEGER NOT NULL,
+    due_on TEXT NOT NULL,
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    interest_centavos INTEGER NOT NULL DEFAULT 0 CHECK (interest_centavos >= 0),
+    interest_txn_id INTEGER, -- the Fees & Charges › Interest expense, once paid
+    paid_txn_id INTEGER      -- the transfer that paid it. NULL while it waits
+);
+
+insertPlan:
+INSERT INTO credit_plan(account_id, name, principal_centavos, txn_id) VALUES (?, ?, ?, ?);
+
+lastId:
+SELECT last_insert_rowid();
+
+insertInstallment:
+INSERT INTO credit_installment(plan_id, n, due_on, centavos, interest_centavos) VALUES (?, ?, ?, ?, ?);
+
+planAccount:
+SELECT account_id FROM credit_plan WHERE id = ?;
+
+cardPaymentById:
+SELECT * FROM credit_installment WHERE id = ?;
+
+-- Every payment with its plan, for the credit row's lines.
+allCardPayments:
+SELECT ci.*, p.name, p.account_id
+FROM credit_installment ci
+JOIN credit_plan p ON p.id = ci.plan_id
+ORDER BY p.id, ci.n;
+
+-- Waiting payments due by :today, oldest first, for the check-in.
+dueCardPayments:
+SELECT ci.*, p.name, p.account_id, a.name AS account,
+       (SELECT COUNT(*) FROM credit_installment x WHERE x.plan_id = ci.plan_id) AS total_parts
+FROM credit_installment ci
+JOIN credit_plan p ON p.id = ci.plan_id
+JOIN account a ON a.id = p.account_id
+WHERE ci.paid_txn_id IS NULL AND ci.due_on <= :today
+ORDER BY ci.due_on, ci.plan_id, ci.n;
+
+-- Only while it waits, so a double tap pays once.
+markPaid:
+UPDATE credit_installment SET interest_txn_id = :interestTxnId, paid_txn_id = :paidTxnId
+WHERE id = :id AND paid_txn_id IS NULL;
+
+eraseAll {
+    DELETE FROM credit_installment;
+    DELETE FROM credit_plan;
+}
+
+backupPlans:
+SELECT * FROM credit_plan ORDER BY id;
+
+backupInstallments:
+SELECT * FROM credit_installment ORDER BY id;
+
+backupInsertPlan:
+INSERT INTO credit_plan VALUES ?;
+
+backupInsertInstallment:
+INSERT INTO credit_installment VALUES ?;
