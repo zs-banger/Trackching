@@ -237,9 +237,14 @@ class Ledger(private val db: TrackchingDatabase) {
         }
     }
 
+    /** Whether an account still holds someone's money, so it can't be archived (P3-10). */
+    fun holdsMoney(accountId: Long): Boolean =
+        accountId in heldPerAccount(db.iouQueries.heldByAccount().executeAsList())
+
     /** Hides an account from Home and pickers. Its transactions stay. You must keep at least one. */
     fun archive(accountId: Long) {
         require(db.accountQueries.countActive().executeAsOne() > 1) { "Keep at least one account" }
+        require(!holdsMoney(accountId)) { HandBackFirst }
         db.accountQueries.setArchived(1, accountId)
     }
 
@@ -782,13 +787,16 @@ class Ledger(private val db: TrackchingDatabase) {
     }
 
     /** Each account's own money: its balance minus what I'm still holding in it for others. Only accounts that hold some. */
-    fun ownMoney(): Map<Long, Long> {
-        val held = db.iouQueries.heldByAccount().executeAsList()
-            .groupBy { it.account_id }
-            .mapValues { (_, rows) -> rows.sumOf { (it.centavos - it.paid).coerceAtLeast(0) } }
-            .filterValues { it > 0 }
-        return held.mapValues { (account, holding) -> balance(account) - holding }
-    }
+    fun ownMoney(): Map<Long, Long> =
+        heldPerAccount(db.iouQueries.heldByAccount().executeAsList()).mapValues { (account, holding) -> balance(account) - holding }
+
+    /** What I'm holding for others in each account, re-sent when an IOU or payment changes (P3-10). */
+    fun held(): Flow<Map<Long, Long>> =
+        db.iouQueries.heldByAccount().asFlow().mapToList(Dispatchers.Default).map(::heldPerAccount)
+
+    /** The net worth card: balances and open IOUs together. */
+    fun netWorth(today: LocalDate): Flow<NetWorth> =
+        balances().combine(ious(today)) { balances, rows -> netWorthOf(totalBalance(balances), rows) }
 
     /**
      * Records a payment (P3-9): Record payment, Payment received or Hand back.
