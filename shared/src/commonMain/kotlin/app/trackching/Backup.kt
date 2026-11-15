@@ -9,7 +9,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Bump this when the file layout changes. Older apps then refuse newer files. 2: repeat rules (P3-1). */
+/** Bump this when the file layout changes. Older apps then refuse newer files. 2: repeat rules (P3-1). 4: IOUs (P3-5). */
 const val BackupFormat = 4
 
 @Serializable
@@ -71,6 +71,7 @@ data class IouBackup(
 data class IouPaymentBackup(
     val id: Long, val iouId: Long, val txnId: Long, val principalCentavos: Long, val interestCentavos: Long,
 )
+
 private val BackupJson = Json {
     prettyPrint = true
     encodeDefaults = true

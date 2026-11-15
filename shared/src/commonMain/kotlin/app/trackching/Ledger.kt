@@ -626,7 +626,7 @@ class Ledger(private val db: TrackchingDatabase) {
                 it.category,
                 it.subcategory,
                 it.event,
-                it.person
+                it.person,
             ))
         }
         return (listOf(header) + rows).joinToString("\r\n", postfix = "\r\n")
