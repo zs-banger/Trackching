@@ -78,4 +78,6 @@ data class NewIou(
     val note: String = "",
     /** "It paid for something" (P3-8): the expense category, instead of money moving. Only for OWE. */
     val paidFor: Long? = null,
+    /** Paid back in parts (P3-17). They add up to the amount plus interest; the last one is the due date. */
+    val installments: List<PlannedPayment>? = null,
 )

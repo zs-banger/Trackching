@@ -12,12 +12,15 @@ import app.trackching.db.Event_run
 import app.trackching.db.EventSpendingBetween
 import app.trackching.db.ExpensesByEvent
 import app.trackching.db.Iou_payment
+import app.trackching.db.Iou_installment
+import app.trackching.db.DueInstallments
 import app.trackching.db.IouDetail
 import app.trackching.db.PaymentRows
 import app.trackching.db.PaymentMoves
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import app.trackching.db.History
 import app.trackching.db.Txn
 import app.trackching.db.ManageList
@@ -44,9 +47,15 @@ data class RunUndo(val run: Event_run, val untagged: List<Long>, val deleted: Bo
 
 /** What Undo needs after a payment is deleted (P3-7): the payment and the money that moved. */
 /** An IOU as the Edit IOU sheet loads it: the row, the person's name, its money and its spending (P3-8). */
-data class IouToEdit(val iou: Iou, val person: String, val money: Txn?, val spend: Txn?)
+data class IouToEdit(
+    val iou: Iou,
+    val person: String,
+    val money: Txn?,
+    val spend: Txn?,
+    val installments: List<Iou_installment> = emptyList(),
+)
 
-data class DeletedPayment(val payment: Iou_payment, val txn: Txn)
+data class DeletedPayment(val payment: Iou_payment, val txn: Txn, val installmentId: Long? = null)
 
 data class DeletedEvent(val event: Event, val txnIds: List<Long>, val runs: List<Event_run> = emptyList())
 
@@ -540,6 +549,14 @@ class Ledger(private val db: TrackchingDatabase) {
     /** The number waiting for an OK. Re-sent whenever a repeat changes, so the badge keeps up by itself. */
     fun dueCount(today: LocalDate): Flow<Int> =
         db.repeatRuleQueries.allRules().asFlow().mapToList(Dispatchers.Default).map { countDue(it, today) }
+            .combine(db.iouQueries.allWaitingInstallments().asFlow().mapToList(Dispatchers.Default)) { repeats, parts ->
+                repeats to parts
+            }
+            .combine(ious(today)) { (repeats, parts), rows ->
+                // P3-17: IOU parts wait in the check-in too, unless the IOU is paid off.
+                val open = rows.filterNot { it.settled }.map { it.id }.toSet()
+                repeats + parts.count { it.iou_id in open && LocalDate.parse(it.due_on) <= today }
+            }
 
     /** Dates after today and up to 7 days from now: "Coming up this week". */
     fun upcomingRepeats(today: LocalDate): List<DueRepeat> {
@@ -577,7 +594,15 @@ class Ledger(private val db: TrackchingDatabase) {
             iou.kind.name, personId, iou.centavos, iou.whatFor.trim(), iou.openedOn.toString(), iou.dueOn?.toString(),
             iou.interest.kindName(), iou.interest.value(), iou.note.trim(), txnId, spendId,
         )
-        db.iouQueries.lastId().executeAsOne()
+        val id = db.iouQueries.lastId().executeAsOne()
+        insertInstallments(id, iou.installments)
+        id
+    }
+
+    private fun insertInstallments(iouId: Long, parts: List<PlannedPayment>?) {
+        parts?.forEachIndexed { i, p ->
+            db.iouQueries.insertInstallment(iouId, i + 1L, p.dueOn.toString(), p.centavos, p.interest)
+        }
     }
 
     /** The rules for adding or editing an IOU. Saves the person's name and returns their id. */
@@ -587,7 +612,14 @@ class Ledger(private val db: TrackchingDatabase) {
         require(iou.centavos > 0) { "An IOU needs an amount" }
         require(iou.kind != IouKind.HOLDING || iou.interest == Interest.None) { "Money you're holding has no interest" }
         require(iou.paidFor == null || iou.kind == IouKind.OWE) { "Only an IOU you owe can pay for something" }
-        interestOf(IouTerms(iou.centavos, iou.interest, iou.openedOn, iou.dueOn)) // fails early on a bad interest
+        val interest = interestOf(IouTerms(iou.centavos, iou.interest, iou.openedOn, iou.dueOn)) // fails early on a bad interest
+        iou.installments?.let { parts ->
+            require(iou.kind != IouKind.HOLDING) { "Money you're holding is handed back, not paid in parts" }
+            require(parts.size >= 2) { "Installments need at least 2 payments" }
+            require(parts.sumOf { it.centavos } == iou.centavos + interest) { "The payments must add up to the amount plus interest" }
+            require(parts.all { it.dueOn >= iou.openedOn }) { "A payment can't be due before the IOU started" }
+            require(iou.dueOn == parts.maxOf { it.dueOn }) { "The due date is the last payment's" }
+        }
         db.iouQueries.addPerson(name)
         return db.iouQueries.personId(name).executeAsOne()
     }
@@ -613,7 +645,7 @@ class Ledger(private val db: TrackchingDatabase) {
         val person = db.iouQueries.iouDetail(id).executeAsOne().person
         val money = iou.txn_id?.let { db.txnQueries.byId(it).executeAsOneOrNull() }
         val spend = iou.spend_txn_id?.let { db.txnQueries.byId(it).executeAsOneOrNull() }
-        return IouToEdit(iou, person, money, spend)
+        return IouToEdit(iou, person, money, spend, db.iouQueries.installmentsOf(id).executeAsList())
     }
 
     /**
@@ -641,6 +673,11 @@ class Ledger(private val db: TrackchingDatabase) {
         )
         // After the IOU stops pointing at it.
         if (category == null && oldSpend != null) db.txnQueries.delete(oldSpend)
+        // P3-17: the plan can change only while no part is saved or skipped.
+        if (db.iouQueries.countHandled(id).executeAsOne() == 0L) {
+            db.iouQueries.deleteInstallmentsOf(id)
+            insertInstallments(id, iou.installments)
+        }
     }
 
     /** Remembered names that start with what's typed, for the suggestions under the field. */
@@ -679,9 +716,12 @@ class Ledger(private val db: TrackchingDatabase) {
     fun deletePayment(paymentId: Long): DeletedPayment? = db.transactionWithResult {
         val payment = db.iouQueries.paymentById(paymentId).executeAsOneOrNull() ?: return@transactionWithResult null
         val txn = db.txnQueries.byId(payment.txn_id).executeAsOne()
+        // P3-17: a part the check-in saved as this payment is waiting again.
+        val installment = db.iouQueries.installmentOfPayment(paymentId).executeAsOneOrNull()
+        db.iouQueries.unmarkByPayment(paymentId)
         db.iouQueries.deletePayment(paymentId) // first: the payment points at its transaction
         db.txnQueries.delete(txn.id)
-        DeletedPayment(payment, txn)
+        DeletedPayment(payment, txn, installment)
     }
 
     /** Undo for deletePayment: both come back with their old ids. */
@@ -689,6 +729,48 @@ class Ledger(private val db: TrackchingDatabase) {
         db.txnQueries.restore(deleted.txn)
         val p = deleted.payment
         db.iouQueries.restorePayment(p.id, p.iou_id, p.txn_id, p.principal_centavos, p.interest_centavos)
+        deleted.installmentId?.let { db.iouQueries.setInstallmentPayment(p.id, it) }
+    }
+
+    /** An IOU's parts, in order. Re-sent when one is saved or skipped (P3-17). */
+    fun installments(iouId: Long): Flow<List<Iou_installment>> =
+        db.iouQueries.installmentsOf(iouId).asFlow().mapToList(Dispatchers.Default)
+
+    /** Parts due by [today] and not handled, oldest first, for the check-in. Paid-off IOUs are left out. */
+    fun dueInstallments(today: LocalDate): List<DueInstallments> =
+        db.iouQueries.dueInstallments(today.toString()).executeAsList().filter { iouLeft(it.iou_id) > 0 }
+
+    /** Where a part's money moves: the account the IOU's money used, or the last one used. */
+    fun installmentAccount(iouId: Long): Long? {
+        val active = accounts().map { it.id }.toSet()
+        return db.iouQueries.byId(iouId).executeAsOneOrNull()?.txn_id
+            ?.let { db.txnQueries.byId(it).executeAsOneOrNull()?.account_id }
+            ?.takeIf { it in active }
+            ?: lastAccountUsed()
+    }
+
+    /**
+     * Check-in Save for a due part (P3-17): records it as a payment, with its share of interest.
+     * [centavos] is the part's amount, or what Edit changed it to; never more than what's left.
+     * Returns the payment's id, or null if the part was already handled (a double tap).
+     */
+    fun saveInstallment(installmentId: Long, centavos: Long, occurredAt: Long): Long? = db.transactionWithResult {
+        val part = db.iouQueries.installmentById(installmentId).executeAsOne()
+        if (part.state != "WAITING") return@transactionWithResult null
+        val context = paymentContext(part.iou_id)
+        val amount = minOf(centavos, context.left)
+        val interest = minOf(part.interest_centavos, amount, context.interestDue)
+        val account = requireNotNull(installmentAccount(part.iou_id)) { "Add an account first" }
+        val paymentId = recordPayment(part.iou_id, amount, interest, account, occurredAt)
+        db.iouQueries.markInstallment(state = "SAVED", paymentId = paymentId, id = installmentId)
+        paymentId
+    }
+
+    /** Check-in Skip: nothing is paid, and the part isn't listed again. False if it was already handled. */
+    fun skipInstallment(installmentId: Long): Boolean = db.transactionWithResult {
+        val waiting = db.iouQueries.installmentById(installmentId).executeAsOneOrNull()?.state == "WAITING"
+        if (waiting) db.iouQueries.markInstallment(state = "SKIPPED", paymentId = null, id = installmentId)
+        waiting
     }
 
     /** What the payment sheet needs: the kind, the person, what's left and the interest still due (P3-9). */
@@ -834,6 +916,9 @@ class Ledger(private val db: TrackchingDatabase) {
         iouPayments = db.iouQueries.backupPayments().executeAsList().map {
             IouPaymentBackup(it.id, it.iou_id, it.txn_id, it.principal_centavos, it.interest_centavos)
         },
+        installments = db.iouQueries.backupInstallments().executeAsList().map {
+            InstallmentBackup(it.id, it.iou_id, it.n, it.due_on, it.centavos, it.interest_centavos, it.state, it.payment_id)
+        },
     )
 
     /** Replaces everything with the backup. All or nothing: if any row fails, the old data stays. */
@@ -869,6 +954,11 @@ class Ledger(private val db: TrackchingDatabase) {
             }
             file.iouPayments.forEach {
                 db.iouQueries.backupInsertPayment(Iou_payment(it.id, it.iouId, it.txnId, it.principalCentavos, it.interestCentavos))
+            }
+            file.installments.forEach {
+                db.iouQueries.backupInsertInstallment(
+                    Iou_installment(it.id, it.iouId, it.n, it.dueOn, it.centavos, it.interestCentavos, it.state, it.paymentId),
+                )
             }
             file.settings.forEach { (key, value) -> db.settingQueries.put(key, value) }
 

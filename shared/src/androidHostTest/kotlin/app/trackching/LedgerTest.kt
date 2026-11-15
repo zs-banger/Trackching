@@ -15,6 +15,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 class LedgerTest {
 
@@ -754,7 +756,7 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 7", "\"format\": 1")
+            .replace("\"format\": 8", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
@@ -1377,5 +1379,121 @@ class LedgerTest {
     fun holdingNeverCountsExtraAsInterest() {
         val id = iou(IouKind.HOLDING)
         assertFailsWith<IllegalArgumentException> { ledger.recordPayment(id, 50_000, 0, cash(), 1, extraAsInterest = 1_000) }
+    }
+
+    // P3-17: pay an IOU in installments
+
+    private fun inParts(interest: Interest = Interest.None): Long {
+        val dates = installmentDates(d(2, 15), 2, RepeatUnit.MONTH)
+        val interestTotal = interestOf(IouTerms(50_000, interest, d(1, 15), dates.last()))
+        val plan = planOf(dates, evenAmounts(50_000 + interestTotal, 2), interestTotal)
+        return ledger.addIou(
+            NewIou(IouKind.OWE, "Juan", 50_000, "Phone", d(1, 15), dueOn = dates.last(), interest = interest, installments = plan),
+            cash(), 0,
+        )
+    }
+
+    private fun parts(id: Long) = db.iouQueries.installmentsOf(id).executeAsList()
+
+    @Test
+    fun anIouInPartsSavesEachPayment() {
+        val id = inParts()
+        assertEquals(listOf("2026-02-15" to 25_000L, "2026-03-15" to 25_000L), parts(id).map { it.due_on to it.centavos })
+        assertTrue(parts(id).all { it.state == "WAITING" })
+    }
+
+    @Test
+    fun partsThatDontAddUpAreRefused() {
+        val plan = planOf(listOf(d(2, 15), d(3, 15)), listOf(10_000, 10_000), 0)
+        assertFailsWith<IllegalArgumentException> {
+            ledger.addIou(NewIou(IouKind.OWE, "Juan", 50_000, "", d(1, 15), dueOn = d(3, 15), installments = plan), cash(), 0)
+        }
+    }
+
+    @Test
+    fun onlyDuePartsAreInTheCheckIn() {
+        val id = inParts()
+        assertEquals(emptyList(), ledger.dueInstallments(d(2, 14)))
+        val due = ledger.dueInstallments(d(2, 15)).single()
+        assertEquals(id, due.iou_id)
+        assertEquals(2L, due.total_parts)
+        assertEquals("Pay Juan", due.title())
+    }
+
+    @Test
+    fun savingAPartPaysItWithItsShareOfInterest() {
+        val id = inParts(interest = Interest.Flat(10_000))
+        val due = ledger.dueInstallments(d(2, 15)).single()
+        val before = ledger.balance(cash())
+        assertNotNull(ledger.saveInstallment(due.id, due.centavos, 1))
+        val paid = db.iouQueries.paymentsOf(id).executeAsList().single()
+        assertEquals(30_000, paid.principal_centavos + paid.interest_centavos)
+        assertEquals(5_000, paid.interest_centavos)
+        assertEquals(before - 30_000, ledger.balance(cash()))
+        assertEquals("SAVED", parts(id).first().state)
+        assertNull(ledger.saveInstallment(due.id, due.centavos, 1)) // a double tap pays once
+    }
+
+    @Test
+    fun anEditedPartNeverPaysMoreThanWhatsLeft() {
+        val id = inParts()
+        val due = ledger.dueInstallments(d(2, 15)).single()
+        ledger.saveInstallment(due.id, 90_000, 1)
+        assertEquals(0, ledger.iouLeft(id))
+        assertEquals(emptyList(), ledger.dueInstallments(d(4, 1))) // paid off: the second part isn't asked
+    }
+
+    @Test
+    fun skippingAPartPaysNothing() {
+        val id = inParts()
+        val due = ledger.dueInstallments(d(2, 15)).single()
+        assertTrue(ledger.skipInstallment(due.id))
+        assertFalse(ledger.skipInstallment(due.id))
+        assertEquals(50_000, ledger.iouLeft(id))
+        assertEquals("SKIPPED", parts(id).first().state)
+    }
+
+    @Test
+    fun deletingASavedPartsPaymentPutsItBackAndUndoSavesItAgain() {
+        val id = inParts()
+        val due = ledger.dueInstallments(d(2, 15)).single()
+        val paymentId = assertNotNull(ledger.saveInstallment(due.id, due.centavos, 1))
+        val deleted = assertNotNull(ledger.deletePayment(paymentId))
+        assertEquals("WAITING", parts(id).first().state)
+        ledger.restorePayment(deleted)
+        assertEquals("SAVED" to paymentId, parts(id).first().let { it.state to it.payment_id })
+    }
+
+    @Test
+    fun thePlanChangesOnlyUntilAPartIsHandled() {
+        val id = inParts()
+        val edit = assertNotNull(ledger.iouToEdit(id))
+        val three = planOf(installmentDates(d(2, 1), 3, RepeatUnit.MONTH), evenAmounts(50_000, 3), 0)
+        val newIou = NewIou(IouKind.OWE, "Juan", 50_000, "Phone", d(1, 15), dueOn = d(4, 1), installments = three)
+        ledger.updateIou(id, newIou, edit.money!!.account_id, 0)
+        assertEquals(3, parts(id).size)
+
+        ledger.skipInstallment(parts(id).first().id)
+        ledger.updateIou(id, newIou.copy(installments = null), edit.money!!.account_id, 0)
+        assertEquals(3, parts(id).size) // locked: the plan stays
+    }
+
+    @Test
+    fun duePartsCountTowardTheCheckInBadge() = runBlocking {
+        inParts()
+        assertEquals(0, ledger.dueCount(d(2, 14)).first())
+        assertEquals(1, ledger.dueCount(d(2, 15)).first())
+        assertEquals(2, ledger.dueCount(d(3, 15)).first())
+    }
+
+    @Test
+    fun backupKeepsInstallments() {
+        val id = inParts()
+        ledger.saveInstallment(ledger.dueInstallments(d(2, 15)).single().id, 25_000, 1)
+        val file = ledger.backupFile(d(5, 4))
+        assertEquals(2, file.installments.size)
+        ledger.eraseAll()
+        ledger.restore(openBackup(encodeBackup(file)).let { (it as Opened.Ok).file })
+        assertEquals(listOf("SAVED", "WAITING"), parts(id).map { it.state })
     }
 }
