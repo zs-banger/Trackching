@@ -47,6 +47,7 @@ fun IousScreen(
     var showSettled by rememberSaveable { mutableStateOf(false) }
     val view = remember(rows, kind) { tabOf(rows, kind) }
     val credit by remember(ledger) { ledger.creditAccounts() }.collectAsState(initial = emptyList())
+    var charging by remember { mutableStateOf<CreditAccounts?>(null) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
         item(key = "tabs") {
@@ -80,7 +81,7 @@ fun IousScreen(
                     color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 )
             }
-            items(credit, key = { "credit-${it.id}" }) { CreditRow(it, today) }
+            items(credit, key = { "credit-${it.id}" }) { CreditRow(it, today, onCharge = { charging = it }) }
         }
         if (view.settled.isNotEmpty()) {
             item(key = "settled") {
@@ -97,6 +98,8 @@ fun IousScreen(
             }
         }
     }
+
+    charging?.let { card -> ChargeSheet(ledger, card, onDismiss = { charging = null }) }
 }
 
 private fun emptyMessage(kind: IouKind) = when (kind) {
@@ -113,7 +116,7 @@ private fun newLabel(kind: IouKind) = when (kind) {
 
 /** A card or lender: "₱X owed", when it's due, and the minimum. */
 @Composable
-private fun CreditRow(card: CreditAccounts, today: LocalDate) {
+private fun CreditRow(card: CreditAccounts, today: LocalDate, onCharge: () -> Unit) {
     val c = TrackchingTheme.colors
     Row(
         Modifier.fillMaxWidth().background(c.band).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -127,7 +130,10 @@ private fun CreditRow(card: CreditAccounts, today: LocalDate) {
                 Text("Minimum ${shown(formatAmount(it, AmountKind.Transfer))}", color = c.ink2, fontSize = 13.sp)
             }
         }
-        Text("${shown(formatAmount(card.owedNow, AmountKind.Transfer))} owed", color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+        Column(horizontalAlignment = Alignment.End) {
+            Text("${shown(formatAmount(card.owedNow, AmountKind.Transfer))} owed", color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            TextButton(onClick = onCharge) { Text("+ ADD CHARGE", color = c.orangeInk, fontWeight = FontWeight.Bold) }
+        }
     }
 }
 
