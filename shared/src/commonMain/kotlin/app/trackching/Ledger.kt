@@ -122,9 +122,17 @@ class Ledger(private val db: TrackchingDatabase) {
         }
     }
 
-    /** Removes a transaction just saved. If it was the only one from its repeat, the repeat goes too. */
+    /**
+     * Removes a transaction just saved. If it was the only one from its repeat, the repeat goes too.
+     * A purchase in installments (P3-15) or a loan (P3-18) takes its plan with it (audit #3).
+     */
     fun undo(txnId: Long) = db.transaction {
         val repeatId = db.txnQueries.byId(txnId).executeAsOneOrNull()?.repeat_id
+        db.creditQueries.planOfTxn(txnId).executeAsOneOrNull()?.let { plan ->
+            require(db.creditQueries.countPaidOfPlan(plan.id).executeAsOne() == 0L) { "A payment of this plan is already paid" }
+            db.creditQueries.deletePaymentsOfPlan(plan.id)
+            db.creditQueries.deletePlan(plan.id)
+        }
         db.txnQueries.delete(txnId)
         if (repeatId != null && db.txnQueries.countForRepeat(repeatId).executeAsOne() == 0L) {
             db.repeatRuleQueries.delete(repeatId)
@@ -187,8 +195,20 @@ class Ledger(private val db: TrackchingDatabase) {
     /** One transaction, for the edit sheet. */
     fun get(id: Long): Txn? = db.txnQueries.byId(id).executeAsOneOrNull()
 
+    /**
+     * Why a transaction can't be edited or deleted on its own, or null if it can (audit #2, #4).
+     * IOU spending changes with its IOU, and a card plan's transactions with the plan.
+     */
+    fun linkedTo(txnId: Long): String? {
+        db.iouQueries.iouOfSpend(txnId).executeAsOneOrNull()?.let { return linkedToIou(it) }
+        db.creditQueries.planOfTxn(txnId).executeAsOneOrNull()?.let { return linkedToPlan(it.name, it.account) }
+        db.creditQueries.paymentOfTxn(txnId).executeAsList().firstOrNull()?.let { return linkedToPlan(it.name, it.account) }
+        return null
+    }
+
     /** Saves changes to an existing transaction. Same rules as logging a new one. */
     fun update(txn: Txn) {
+        linkedTo(txn.id)?.let { throw IllegalArgumentException(it) }
         require(txn.centavos > 0) { "An amount must be more than ₱0.00" }
         if (txn.kind == "TRANSFER") {
             require(txn.to_account_id != null && txn.to_account_id != txn.account_id) {
@@ -205,6 +225,7 @@ class Ledger(private val db: TrackchingDatabase) {
 
     /** Deletes a transaction and hands back the whole row, so Undo can restore it exactly. */
     fun delete(id: Long): Txn? = db.transactionWithResult {
+        linkedTo(id)?.let { throw IllegalArgumentException(it) }
         val row = db.txnQueries.byId(id).executeAsOneOrNull()
         if (row != null) db.txnQueries.delete(id)
         row
@@ -267,10 +288,21 @@ class Ledger(private val db: TrackchingDatabase) {
     fun holdsMoney(accountId: Long): Boolean =
         accountId in heldPerAccount(db.iouQueries.heldByAccount().executeAsList())
 
+    /**
+     * Why an account can't be archived yet, or null if it can: it holds someone's money (P3-10),
+     * or it's a card with something still owed (audit #7), which would hide the debt.
+     */
+    fun archiveRefusal(accountId: Long): String? {
+        if (holdsMoney(accountId)) return HandBackFirst
+        val card = db.accountQueries.creditAccounts().executeAsList().firstOrNull { it.id == accountId }
+        if (card != null && card.owedNow > 0) return payOffFirst(card.name, card.owedNow)
+        return null
+    }
+
     /** Hides an account from Home and pickers. Its transactions stay. You must keep at least one. */
     fun archive(accountId: Long) {
         require(db.accountQueries.countActive().executeAsOne() > 1) { "Keep at least one account" }
-        require(!holdsMoney(accountId)) { HandBackFirst }
+        archiveRefusal(accountId)?.let { throw IllegalArgumentException(it) }
         db.accountQueries.setArchived(1, accountId)
     }
 
@@ -315,6 +347,10 @@ class Ledger(private val db: TrackchingDatabase) {
     fun categoryUsage(categoryId: Long): Long =
         db.txnQueries.usageOf(withSubs(categoryId)).executeAsOne()
 
+    /** How many repeats use this category (and its subs). They move with the transactions (audit #1). */
+    fun categoryRepeats(categoryId: Long): Long =
+        db.repeatRuleQueries.usageOfCategories(withSubs(categoryId)).executeAsOne()
+
     /** Where this category's transactions may go: same kind, loggable, not itself or its subs. */
     fun moveTargets(categoryId: Long): List<Leaves> {
         val gone = withSubs(categoryId)
@@ -333,12 +369,14 @@ class Ledger(private val db: TrackchingDatabase) {
             require(db.categoryQueries.countOthersOfKind(kind, gone).executeAsOne() > 0) {
                 "Keep at least one category"
             }
-            if (db.txnQueries.usageOf(gone).executeAsOne() > 0) {
+            val used = db.txnQueries.usageOf(gone).executeAsOne() + db.repeatRuleQueries.usageOfCategories(gone).executeAsOne()
+            if (used > 0) {
                 require(moveTo != null) { "Choose where its transactions go first" }
                 require(db.categoryQueries.leaves(kind).executeAsList().any { it.id == moveTo && it.id !in gone }) {
                     "Transactions can only move to another category of the same kind"
                 }
                 db.txnQueries.moveCategory(moveTo, gone)
+                db.repeatRuleQueries.moveCategory(moveTo, gone) // a repeat still pointing here would block the delete
             }
             db.categoryQueries.deleteSubs(categoryId)
             db.categoryQueries.deleteOne(categoryId)
@@ -690,6 +728,13 @@ class Ledger(private val db: TrackchingDatabase) {
     fun updateIou(id: Long, iou: NewIou, accountId: Long, occurredAt: Long) = db.transaction {
         val old = db.iouQueries.byId(id).executeAsOne()
         val personId = checkIou(iou)
+        // Audit #5: once something's paid, the payments' money only fits the same kind and at least that amount.
+        val paid = paidOn(id)
+        if (paid > 0) {
+            require(iou.kind.name == old.kind) { KindLocked }
+            val total = iou.centavos + interestOf(IouTerms(iou.centavos, iou.interest, iou.openedOn, iou.dueOn))
+            require(total >= paid) { alreadyPaidMessage(paid) }
+        }
         val txnId = old.txn_id?.also {
             db.txnQueries.update(IOU, iou.kind.sign * iou.centavos, accountId, null, null, occurredAt, it)
         } ?: insertIouMoney(iou, accountId, occurredAt)
@@ -714,6 +759,9 @@ class Ledger(private val db: TrackchingDatabase) {
             insertInstallments(id, iou.installments)
         }
     }
+
+    /** What's been paid on an IOU so far, interest included (audit #5). */
+    fun paidOn(iouId: Long): Long = db.iouQueries.paidOn(iouId).executeAsOne()
 
     /** Remembered names that start with what's typed, for the suggestions under the field. */
     fun personNames(typed: String): List<String> = db.iouQueries.namesLike(typed.trim()).executeAsList()
@@ -947,6 +995,10 @@ class Ledger(private val db: TrackchingDatabase) {
      * So what's owed drops by the principal part. False if it was already paid (a double tap).
      */
     fun payCardPayment(paymentId: Long, fromAccountId: Long, occurredAt: Long): Boolean = db.transactionWithResult {
+        val part = db.creditQueries.cardPaymentById(paymentId).executeAsOne()
+        if (part.paid_txn_id != null) return@transactionWithResult false
+        require(!isCredit(fromAccountId)) { "Pay from cash, bank or e-wallet" }
+        checkOwnMoney(fromAccountId, part.centavos) // audit #6: same rule as Pay bill
         payOne(paymentId, fromAccountId, occurredAt) != null
     }
 

@@ -117,4 +117,13 @@ class CreditTest {
         assertNull(form.loan())
         assertEquals("The amount must be a number, like 5000.00", BorrowForm().apply { amount = "abc" }.error())
     }
+
+    @Test
+    fun theAuditMessagesReadWell() {
+        assertEquals("Pay off BPI Card first. It still has ₱ 100.00 owed.", payOffFirst("BPI Card", 10_000))
+        assertEquals("Part of Earphones on BPI Card. It changes with the plan.", linkedToPlan("Earphones", "BPI Card"))
+        assertEquals("1 repeat uses it.", categoryUsageLine(0, 1))
+        assertEquals("3 transactions and 1 repeat use it.", categoryUsageLine(3, 1))
+        assertEquals("1 transaction uses it.", categoryUsageLine(1, 0))
+    }
 }

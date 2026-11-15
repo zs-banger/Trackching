@@ -43,3 +43,13 @@ class CategoryForm(private val takenNames: (kind: String, parentId: Long?) -> Se
 
     val canSave: Boolean get() = name.isNotBlank() && error == null
 }
+
+/** "3 transactions use it.", "1 repeat uses it.", "3 transactions and 1 repeat use it." (audit #1) */
+fun categoryUsageLine(txns: Long, repeats: Long): String {
+    val parts = listOfNotNull(
+        txns.takeIf { it > 0 }?.let { if (it == 1L) "1 transaction" else "$it transactions" },
+        repeats.takeIf { it > 0 }?.let { if (it == 1L) "1 repeat" else "$it repeats" },
+    )
+    val verb = if (txns + repeats == 1L) "uses" else "use"
+    return "${parts.joinToString(" and ")} $verb it."
+}
