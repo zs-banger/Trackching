@@ -86,3 +86,15 @@ INSERT INTO iou VALUES ?;
 
 backupInsertPayment:
 INSERT INTO iou_payment VALUES ?;
+
+-- Every IOU with its person and what's been paid so far, for the IOUs tab.
+-- The math (interest, what's left, overdue) happens in IouList.kt, where it's tested.
+iouList:
+SELECT i.id, i.kind, p.id AS person_id, p.name AS person, i.centavos, i.what_for,
+       i.opened_on, i.due_on, i.interest_kind, i.interest_value,
+       CAST(COALESCE(SUM(ip.principal_centavos + ip.interest_centavos), 0) AS INTEGER) AS paid
+FROM iou i
+JOIN person p ON p.id = i.person_id
+LEFT JOIN iou_payment ip ON ip.iou_id = i.id
+GROUP BY i.id
+ORDER BY i.id;
