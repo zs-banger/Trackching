@@ -12,6 +12,8 @@ import app.trackching.db.Event_run
 import app.trackching.db.EventSpendingBetween
 import app.trackching.db.ExpensesByEvent
 import app.trackching.db.Iou_payment
+import app.trackching.db.IouDetail
+import app.trackching.db.PaymentRows
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -38,6 +40,9 @@ import kotlinx.datetime.atStartOfDayIn
 /** A deleted event and the transactions it had, so Undo can put both back. */
 /** What Undo needs after a run's dates are changed or deleted (P3-20): the run as it was, and what got untagged. */
 data class RunUndo(val run: Event_run, val untagged: List<Long>, val deleted: Boolean)
+
+/** What Undo needs after a payment is deleted (P3-7): the payment and the money that moved. */
+data class DeletedPayment(val payment: Iou_payment, val txn: Txn)
 
 data class DeletedEvent(val event: Event, val txnIds: List<Long>, val runs: List<Event_run> = emptyList())
 
@@ -598,6 +603,32 @@ class Ledger(private val db: TrackchingDatabase) {
 
     /** How many IOUs are overdue, for the badge on the IOUs tab. */
     fun overdueCount(today: LocalDate): Flow<Int> = ious(today).map { rows -> rows.count { it.overdue } }
+
+    /** One IOU with its person, or null once it's gone. Re-sent when it changes (P3-7). */
+    fun iou(id: Long): Flow<IouDetail?> = db.iouQueries.iouDetail(id).asFlow().mapToOneOrNull(Dispatchers.Default)
+
+    /** An IOU's payments, newest first, with their account. Re-sent when one changes. */
+    fun payments(iouId: Long): Flow<List<PaymentRows>> =
+        db.iouQueries.paymentRows(iouId).asFlow().mapToList(Dispatchers.Default)
+
+    /**
+     * Deletes a payment and the money it moved, so the account and "what's left" go back to before it.
+     * Returns what Undo needs.
+     */
+    fun deletePayment(paymentId: Long): DeletedPayment? = db.transactionWithResult {
+        val payment = db.iouQueries.paymentById(paymentId).executeAsOneOrNull() ?: return@transactionWithResult null
+        val txn = db.txnQueries.byId(payment.txn_id).executeAsOne()
+        db.iouQueries.deletePayment(paymentId) // first: the payment points at its transaction
+        db.txnQueries.delete(txn.id)
+        DeletedPayment(payment, txn)
+    }
+
+    /** Undo for deletePayment: both come back with their old ids. */
+    fun restorePayment(deleted: DeletedPayment) = db.transaction {
+        db.txnQueries.restore(deleted.txn)
+        val p = deleted.payment
+        db.iouQueries.restorePayment(p.id, p.iou_id, p.txn_id, p.principal_centavos, p.interest_centavos)
+    }
 
     fun amountsHidden(): Boolean =
         db.settingQueries.get("amounts_hidden").executeAsOneOrNull() == "true"
