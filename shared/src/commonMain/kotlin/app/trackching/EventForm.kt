@@ -11,6 +11,17 @@ class EventForm(today: LocalDate) {
     var start by mutableStateOf(today)
     var end by mutableStateOf<LocalDate?>(null)
 
+    /** Null = doesn't repeat. Days, weeks or months otherwise (never years). */
+    var repeatUnit by mutableStateOf<RepeatUnit?>(null)
+    var repeatEvery by mutableStateOf(1)
+
+    fun stepEvery(by: Int) {
+        repeatEvery = (repeatEvery + by).coerceIn(1, 99)
+    }
+
+    /** What to save: null when it doesn't repeat. */
+    val repeat: EventRepeat? get() = repeatUnit?.let { EventRepeat(repeatEvery, it) }
+
     val error: String?
         get() {
             val e = end
