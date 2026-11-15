@@ -34,3 +34,19 @@ fun EventRow.showingRun(runs: List<EventRun>, today: LocalDate): EventRow {
     val run = runToShow(runs, today) ?: return this
     return copy(start = run.first, end = run.last)
 }
+
+/** The History card's order (P3-20): upcoming runs on top, soonest first, then the rest, newest first. */
+fun historyOrder(runs: List<EventRun>, today: LocalDate): List<EventRun> {
+    val (upcoming, rest) = runs.partition { it.first > today }
+    return upcoming.sortedBy { it.first } + rest.sortedByDescending { it.first }
+}
+
+/** "Mar 10–14 · now", "· upcoming", or just the dates. */
+fun runLabel(run: EventRun, today: LocalDate): String {
+    val dates = periodLabel(EventPeriod(run.first, run.last))
+    return when {
+        run.first > today -> "$dates · upcoming"
+        today in run.first..run.last -> "$dates · now"
+        else -> dates
+    }
+}

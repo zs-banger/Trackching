@@ -88,6 +88,16 @@ INSERT INTO event_run(event_id, start_date, end_date) VALUES (?, ?, ?);
 restoreRun:
 INSERT INTO event_run(id, event_id, start_date, end_date) VALUES (?, ?, ?, ?);
 
+runById:
+SELECT * FROM event_run WHERE id = ?;
+
+-- Change one run's dates (P3-20).
+updateRun:
+UPDATE event_run SET start_date = ?, end_date = ? WHERE id = ?;
+
+deleteRun:
+DELETE FROM event_run WHERE id = ?;
+
 deleteRunsOf:
 DELETE FROM event_run WHERE event_id = ?;
 
