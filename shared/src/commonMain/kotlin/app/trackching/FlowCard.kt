@@ -85,6 +85,10 @@ fun FlowCard(flow: Flow, running: Boolean, onPickTab: (TypeTab) -> Unit, modifie
                 )
             }
 
+            // P3-9: IOU money leaving, shown but never counted in Net.
+            if (flow.debtPayments != 0L) FlowLine("Debt payments", shown("− " + formatAmount(flow.debtPayments, AmountKind.Transfer)))
+            if (flow.handedBack != 0L) FlowLine("Handed back", shown("− " + formatAmount(flow.handedBack, AmountKind.Transfer)))
+
             if (flow.others > 0) {
                 Text(
                     "The other ${flow.others}, like transfers, are in History but don't change Net.",
