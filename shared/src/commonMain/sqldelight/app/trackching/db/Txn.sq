@@ -1,7 +1,7 @@
 CREATE TABLE txn (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL CHECK (kind IN ('EXPENSE', 'INCOME', 'TRANSFER', 'ADJUSTMENT')),
-    centavos INTEGER NOT NULL CHECK (centavos > 0 OR (kind = 'ADJUSTMENT' AND centavos <> 0)),
+    kind TEXT NOT NULL CHECK (kind IN ('EXPENSE', 'INCOME', 'TRANSFER', 'ADJUSTMENT', 'IOU')),
+    centavos INTEGER NOT NULL CHECK (centavos > 0 OR (kind IN ('ADJUSTMENT', 'IOU') AND centavos <> 0)),
     account_id INTEGER NOT NULL REFERENCES account(id),
     to_account_id INTEGER REFERENCES account(id),
     category_id INTEGER REFERENCES category(id), -- NULL for transfers
@@ -52,6 +52,7 @@ FROM txn t
 JOIN account a ON a.id = t.account_id
 LEFT JOIN account ta ON ta.id = t.to_account_id
 LEFT JOIN category c ON c.id = t.category_id
+WHERE t.kind <> 'IOU' -- IOU money shows in the list from P3-8
 ORDER BY t.occurred_at DESC, t.id DESC;
 
 byId:
@@ -117,13 +118,17 @@ SELECT t.occurred_at, t.kind, t.centavos,
        a.name AS account, b.name AS to_account,
        COALESCE(p.name, c.name) AS category,
        CASE WHEN p.id IS NULL THEN NULL ELSE c.name END AS subcategory,
-       e.name AS event
+       e.name AS event,
+       pe.name AS person
 FROM txn t
 JOIN account a ON a.id = t.account_id
 LEFT JOIN account b ON b.id = t.to_account_id
 LEFT JOIN category c ON c.id = t.category_id
 LEFT JOIN category p ON p.id = c.parent_id
 LEFT JOIN event e ON e.id = t.event_id
+LEFT JOIN iou_payment ip ON ip.txn_id = t.id
+LEFT JOIN iou i ON i.txn_id = t.id OR i.id = ip.iou_id
+LEFT JOIN person pe ON pe.id = i.person_id
 ORDER BY t.occurred_at, t.id;
 
 setRepeat:

@@ -1,0 +1,56 @@
+-- Version 3 → 4 (P3-5): IOUs, and a new 'IOU' kind of transaction.
+
+-- SQLite can't change a CHECK on an existing table, so txn is rebuilt:
+-- make the new table, copy every row, drop the old one, rename the new one.
+-- (The recipe from sqlite.org/lang_altertable.html, "Making Other Kinds Of Table Schema Changes".)
+CREATE TABLE txn_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL CHECK (kind IN ('EXPENSE', 'INCOME', 'TRANSFER', 'ADJUSTMENT', 'IOU')),
+    centavos INTEGER NOT NULL CHECK (centavos > 0 OR (kind IN ('ADJUSTMENT', 'IOU') AND centavos <> 0)),
+    account_id INTEGER NOT NULL REFERENCES account(id),
+    to_account_id INTEGER REFERENCES account(id),
+    category_id INTEGER REFERENCES category(id),
+    occurred_at INTEGER NOT NULL,
+    event_id INTEGER REFERENCES event(id),
+    repeat_id INTEGER REFERENCES repeat_rule(id)
+);
+
+INSERT INTO txn_new(id, kind, centavos, account_id, to_account_id, category_id, occurred_at, event_id, repeat_id)
+SELECT id, kind, centavos, account_id, to_account_id, category_id, occurred_at, event_id, repeat_id FROM txn;
+
+DROP INDEX txn_by_time;
+DROP TABLE txn;
+
+ALTER TABLE txn_new RENAME TO txn;
+
+CREATE INDEX txn_by_time ON txn(occurred_at);
+
+CREATE TABLE person (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK (length(trim(name)) > 0)
+);
+
+CREATE TABLE iou (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL CHECK (kind IN ('OWE', 'OWED', 'HOLDING')),
+    person_id INTEGER NOT NULL REFERENCES person(id),
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    what_for TEXT NOT NULL DEFAULT '',
+    opened_on TEXT NOT NULL,
+    due_on TEXT,
+    interest_kind TEXT NOT NULL DEFAULT 'NONE' CHECK (interest_kind IN ('NONE', 'FLAT', 'MONTHLY')),
+    interest_value INTEGER NOT NULL DEFAULT 0 CHECK (interest_value >= 0),
+    note TEXT NOT NULL DEFAULT '',
+    txn_id INTEGER REFERENCES txn(id),
+    CHECK (kind <> 'HOLDING' OR interest_kind = 'NONE'),
+    CHECK (interest_kind <> 'MONTHLY' OR due_on IS NOT NULL),
+    CHECK (due_on IS NULL OR due_on >= opened_on)
+);
+
+CREATE TABLE iou_payment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    iou_id INTEGER NOT NULL REFERENCES iou(id),
+    txn_id INTEGER NOT NULL REFERENCES txn(id),
+    principal_centavos INTEGER NOT NULL CHECK (principal_centavos >= 0),
+    interest_centavos INTEGER NOT NULL DEFAULT 0 CHECK (interest_centavos >= 0)
+);

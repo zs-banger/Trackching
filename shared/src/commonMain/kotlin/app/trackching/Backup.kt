@@ -9,8 +9,8 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Bump this when the file layout changes. Older apps then refuse newer files. 2: repeat rules (P3-1). */
-const val BackupFormat = 3
+/** Bump this when the file layout changes. Older apps then refuse newer files. 2: repeat rules (P3-1). 4: IOUs (P3-5). */
+const val BackupFormat = 4
 
 @Serializable
 data class BackupFile(
@@ -23,6 +23,9 @@ data class BackupFile(
     val txns: List<TxnBackup>,
     val settings: Map<String, String>,
     val repeats: List<RepeatBackup> = emptyList(),
+    val people: List<PersonBackup> = emptyList(),
+    val ious: List<IouBackup> = emptyList(),
+    val iouPayments: List<IouPaymentBackup> = emptyList(),
 )
 
 @Serializable
@@ -52,6 +55,21 @@ data class RepeatBackup(
     val id: Long, val every: Long, val unit: String, val startDate: String, val times: Long?,
     val untilDate: String?, val done: Long, val kind: String, val centavos: Long,
     val accountId: Long, val toAccountId: Long?, val categoryId: Long?,
+)
+
+@Serializable
+data class PersonBackup(val id: Long, val name: String)
+
+@Serializable
+data class IouBackup(
+    val id: Long, val kind: String, val personId: Long, val centavos: Long, val whatFor: String,
+    val openedOn: String, val dueOn: String?, val interestKind: String, val interestValue: Long,
+    val note: String, val txnId: Long?,
+)
+
+@Serializable
+data class IouPaymentBackup(
+    val id: Long, val iouId: Long, val txnId: Long, val principalCentavos: Long, val interestCentavos: Long,
 )
 
 private val BackupJson = Json {
