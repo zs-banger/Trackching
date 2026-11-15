@@ -5,8 +5,8 @@ import app.trackching.db.History
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 
-/** Every active account added up. */
-fun totalBalance(accounts: List<Balances>): Long = accounts.sumOf { it.balance }
+/** Every active account added up, except credit: what a card holds is owed, not mine (P3-12). */
+fun totalBalance(accounts: List<Balances>): Long = accounts.filterNot { it.isCredit }.sumOf { it.balance }
 
 /** The `n` main categories with the most spending this month. Unused ones are left out. */
 fun topCategories(groups: List<CategoryGroup>, n: Int = 3): List<CategoryGroup> =

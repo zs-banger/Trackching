@@ -12,6 +12,7 @@ import app.trackching.db.Event_run
 import app.trackching.db.EventSpendingBetween
 import app.trackching.db.ExpensesByEvent
 import app.trackching.db.Iou_payment
+import app.trackching.db.CreditAccounts
 import app.trackching.db.Iou_installment
 import app.trackching.db.DueInstallments
 import app.trackching.db.IouDetail
@@ -166,6 +167,10 @@ class Ledger(private val db: TrackchingDatabase) {
     fun balances(): Flow<List<Balances>> =
         db.accountQueries.balances().asFlow().mapToList(Dispatchers.Default)
 
+    /** Credit accounts with what's owed, due day and minimum (P3-12). */
+    fun creditAccounts(): Flow<List<CreditAccounts>> =
+        db.accountQueries.creditAccounts().asFlow().mapToList(Dispatchers.Default)
+
     fun movements(): Flow<List<Movements>> =
         db.txnQueries.movements().asFlow().mapToList(Dispatchers.Default)
 
@@ -205,12 +210,27 @@ class Ledger(private val db: TrackchingDatabase) {
     }
 
     /** Creates an account and returns its id. Names are unique, ignoring case. */
-    fun addAccount(name: String, type: AccountType, color: Long, startingCentavos: Long): Long {
+    /** [dueDay] and [minimumCentavos] are for credit only (P3-12); other types never keep them. */
+    fun addAccount(
+        name: String,
+        type: AccountType,
+        color: Long,
+        startingCentavos: Long,
+        dueDay: Int? = null,
+        minimumCentavos: Long? = null,
+    ): Long {
         val clean = name.trim()
         require(clean.isNotEmpty()) { "An account needs a name" }
         require(db.accountQueries.nameTaken(clean).executeAsOne() == 0L) { "An account called $clean already exists" }
         return db.transactionWithResult {
-            db.accountQueries.create(clean, type.dbName, color, startingCentavos)
+            val credit = type == AccountType.Credit
+            require(dueDay == null || dueDay in 1..31) { "The due day is a day of the month, 1 to 31" }
+            require(minimumCentavos == null || minimumCentavos >= 0) { "The minimum due can't be below zero" }
+            db.accountQueries.create(
+                clean, type.dbName, color, startingCentavos,
+                if (credit) dueDay?.toLong() else null,
+                if (credit) minimumCentavos else null,
+            )
             db.accountQueries.lastId().executeAsOne()
         }
     }
@@ -796,7 +816,8 @@ class Ledger(private val db: TrackchingDatabase) {
 
     /** The net worth card: balances and open IOUs together. */
     fun netWorth(today: LocalDate): Flow<NetWorth> =
-        balances().combine(ious(today)) { balances, rows -> netWorthOf(totalBalance(balances), rows) }
+        balances().combine(ious(today)) { balances, rows -> totalBalance(balances) to rows }
+            .combine(creditAccounts()) { (total, rows), credit -> netWorthOf(total, rows, totalOwed(credit)) }
 
     /**
      * Records a payment (P3-9): Record payment, Payment received or Hand back.
@@ -895,7 +916,7 @@ class Ledger(private val db: TrackchingDatabase) {
     fun backupFile(today: LocalDate): BackupFile = BackupFile(
         createdOn = today.toString(),
         accounts = db.accountQueries.backupAll().executeAsList().map {
-            AccountBackup(it.id, it.name, it.type, it.color, it.starting_centavos, it.archived, it.sort_order)
+            AccountBackup(it.id, it.name, it.type, it.color, it.starting_centavos, it.archived, it.sort_order, it.due_day, it.minimum_centavos)
         },
         categories = db.categoryQueries.backupAll().executeAsList().map {
             CategoryBackup(it.id, it.name, it.kind, it.parent_id, it.color, it.sort_order, it.icon)
@@ -934,7 +955,9 @@ class Ledger(private val db: TrackchingDatabase) {
         db.transaction {
             eraseAll()
             file.accounts.forEach {
-                db.accountQueries.backupInsert(it.id, it.name, it.type, it.color, it.startingCentavos, it.archived, it.sortOrder)
+                db.accountQueries.backupInsert(
+                    it.id, it.name, it.type, it.color, it.startingCentavos, it.archived, it.sortOrder, it.dueDay, it.minimumCentavos,
+                )
             }
             file.categories.forEach {
                 db.categoryQueries.backupInsert(it.id, it.name, it.kind, it.parentId, it.color, it.sortOrder, it.icon)

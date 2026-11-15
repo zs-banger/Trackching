@@ -164,4 +164,16 @@ class MigrationTest {
         assertEquals(emptyList(), ledger.iouToEdit(1)?.installments)
         assertEquals(emptyList(), ledger.dueInstallments(LocalDate(2026, 3, 1)))
     }
+
+    @Test
+    fun oldAccountsHaveNoCreditTerms() {
+        val driver = openCopyOfVersion1()
+        addOneExpense(driver)
+
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
+
+        val account = TrackchingDatabase(driver).accountQueries.backupAll().executeAsList().single()
+        assertNull(account.due_day)
+        assertNull(account.minimum_centavos)
+    }
 }

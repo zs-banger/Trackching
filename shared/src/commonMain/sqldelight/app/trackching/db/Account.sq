@@ -5,15 +5,36 @@ CREATE TABLE account (
     color INTEGER NOT NULL DEFAULT 4288379903, -- 0xFF9B7BFF, purple
     starting_centavos INTEGER NOT NULL DEFAULT 0,
     archived INTEGER NOT NULL DEFAULT 0,
-    sort_order INTEGER NOT NULL DEFAULT 0
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    -- Credit only (P3-12): the day of the month the bill is due (1 to 31), and the minimum due. Both optional. See 8.sqm
+    due_day INTEGER,
+    minimum_centavos INTEGER
 );
 
 insert:
 INSERT INTO account(name, starting_centavos) VALUES (?, ?);
 
 create:
-INSERT INTO account(name, type, color, starting_centavos, sort_order)
-VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM account));
+INSERT INTO account(name, type, color, starting_centavos, sort_order, due_day, minimum_centavos)
+VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM account), ?, ?);
+
+-- Credit accounts with what's owed (P3-12). A purchase makes the balance go below zero; owed is the other way round.
+creditAccounts:
+SELECT a.id, a.name, a.color, a.due_day, a.minimum_centavos, CAST(-(a.starting_centavos + COALESCE(SUM(
+    CASE
+        WHEN t.kind = 'INCOME'   AND t.account_id    = a.id THEN  t.centavos
+        WHEN t.kind = 'EXPENSE'  AND t.account_id    = a.id THEN -t.centavos
+        WHEN t.kind = 'TRANSFER' AND t.account_id    = a.id THEN -t.centavos
+        WHEN t.kind = 'TRANSFER' AND t.to_account_id = a.id THEN  t.centavos
+        WHEN t.kind IN ('ADJUSTMENT', 'IOU') AND t.account_id = a.id THEN  t.centavos
+        ELSE 0
+    END
+), 0)) AS INTEGER) AS owed
+FROM account a
+LEFT JOIN txn t ON t.account_id = a.id OR t.to_account_id = a.id
+WHERE a.archived = 0 AND a.type = 'CREDIT'
+GROUP BY a.id
+ORDER BY a.sort_order, a.id;
 
 nameTaken:
 SELECT COUNT(*) FROM account WHERE name = ? COLLATE NOCASE;
@@ -91,5 +112,5 @@ backupAll:
 SELECT * FROM account ORDER BY id;
 
 backupInsert:
-INSERT INTO account(id, name, type, color, starting_centavos, archived, sort_order)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO account(id, name, type, color, starting_centavos, archived, sort_order, due_day, minimum_centavos)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);

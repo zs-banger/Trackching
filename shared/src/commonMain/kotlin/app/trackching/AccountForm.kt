@@ -4,11 +4,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
-/** Account types you can pick today. Credit arrives with the credit stories. */
+/** Account types. Credit (P3-12) is a card or a lender: what's in it is what I owe. */
 enum class AccountType(val label: String, val dbName: String) {
     Cash("Cash", "CASH"),
     Bank("Bank", "BANK"),
     EWallet("E-wallet", "EWALLET"),
+    Credit("Credit", "CREDIT"),
 }
 
 /** The prototype's account colors. The first one is the default. */
@@ -26,7 +27,22 @@ class AccountForm(
     var color by mutableStateOf(AccountColors.first())
     var starting by mutableStateOf("")
 
-    val startingCentavos: Long? get() = if (starting.isBlank()) null else parseCentavos(starting)
+    /** Credit only: both optional. No limit field (the client, Nov 5). */
+    var dueDay by mutableStateOf("")
+    var minimum by mutableStateOf("")
+
+    val isCredit: Boolean get() = type == AccountType.Credit
+
+    /** What's saved as the starting balance. For credit you type what's already owed, so it's saved below zero. */
+    val startingCentavos: Long?
+        get() {
+            if (starting.isBlank()) return if (isCredit) 0 else null
+            val typed = parseCentavos(starting) ?: return null
+            return if (isCredit) -typed else typed
+        }
+
+    val dueDayNumber: Int? get() = if (isCredit) dueDay.trim().toIntOrNull()?.takeIf { it in 1..31 } else null
+    val minimumCentavos: Long? get() = if (isCredit) parseCentavos(minimum)?.takeIf { it >= 0 } else null
 
     /** One message at a time, shown under the fields. */
     val error: String?
@@ -38,7 +54,11 @@ class AccountForm(
                 clean.isNotEmpty() && clean.lowercase() in takenNames ->
                     "You already have an account called $clean"
                 starting.isNotBlank() && parseCentavos(starting) == null ->
-                    "Starting balance must be a number, like 1500.00"
+                    if (isCredit) "Already owed must be a number, like 1500.00" else "Starting balance must be a number, like 1500.00"
+                isCredit && starting.isNotBlank() && (parseCentavos(starting) ?: 0) < 0 ->
+                    "Already owed can't be below zero"
+                isCredit && dueDay.isNotBlank() && dueDayNumber == null -> "The due day is a day of the month, 1 to 31"
+                isCredit && minimum.isNotBlank() && minimumCentavos == null -> "The minimum due must be a number, like 500.00"
                 else -> null
             }
         }
