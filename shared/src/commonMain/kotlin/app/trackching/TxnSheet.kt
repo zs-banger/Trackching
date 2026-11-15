@@ -326,9 +326,24 @@ private fun CardPlanFields(plan: CardPlanForm, price: Long, onPickFirst: () -> U
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CardPlanCounts.forEach { n ->
-                Chip("$n payments", selected = plan.count == n, onClick = { plan.count = n; plan.fitAmounts() })
+        PaymentsFields(plan, CardPlanCounts, onPickFirst)
+        val payments = plan.payments
+        if (payments != null && price > 0) {
+            val hidden = LocalAmountsHidden.current
+            Text(cardPlanPreview(payments, price) { masked(it, hidden) }, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(CardPlanNote, color = c.ink2, fontSize = 13.sp)
+    }
+}
+
+/** Shared by card installments (P3-15) and cash loans (P3-18): how many, each payment, and the first due date. */
+@Composable
+internal fun PaymentsFields(plan: CardPlanForm, counts: List<Int>, onPickFirst: () -> Unit) {
+    val c = TrackchingTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            counts.forEach { n ->
+                Chip(if (n == 1) "1 payment" else "$n payments", selected = plan.count == n, onClick = { plan.count = n; plan.fitAmounts() })
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -358,12 +373,6 @@ private fun CardPlanFields(plan: CardPlanForm, price: Long, onPickFirst: () -> U
         }
         Text("FIRST PAYMENT DUE", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Chip(plan.firstDue?.let { dateLabel(it) } ?: "Pick a date", selected = plan.firstDue != null, onClick = onPickFirst)
-        val payments = plan.payments
-        if (payments != null && price > 0) {
-            val hidden = LocalAmountsHidden.current
-            Text(cardPlanPreview(payments, price) { masked(it, hidden) }, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        }
-        Text(CardPlanNote, color = c.ink2, fontSize = 13.sp)
     }
 }
 

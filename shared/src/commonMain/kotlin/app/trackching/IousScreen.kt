@@ -50,6 +50,7 @@ fun IousScreen(
     val credit by remember(ledger) { ledger.creditAccounts() }.collectAsState(initial = emptyList())
     var charging by remember { mutableStateOf<CreditAccounts?>(null) }
     var paying by remember { mutableStateOf<CreditAccounts?>(null) }
+    var borrowing by remember { mutableStateOf<CreditAccounts?>(null) }
     val plans by remember(ledger) { ledger.cardPlanLines() }.collectAsState(initial = emptyList())
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -85,7 +86,7 @@ fun IousScreen(
                 )
             }
             items(credit, key = { "credit-${it.id}" }) { card ->
-                CreditRow(card, today, plans.filter { it.accountId == card.id }, onCharge = { charging = card }, onPay = { paying = card })
+                CreditRow(card, today, plans.filter { it.accountId == card.id }, onCharge = { charging = card }, onPay = { paying = card }, onBorrow = { borrowing = card })
             }
         }
         if (view.settled.isNotEmpty()) {
@@ -105,6 +106,7 @@ fun IousScreen(
     }
 
     charging?.let { card -> ChargeSheet(ledger, card, onDismiss = { charging = null }) }
+    borrowing?.let { card -> BorrowSheet(ledger, card, onDismiss = { borrowing = null }) }
     paying?.let { card ->
         PayBillSheet(ledger, card, plans.filter { it.accountId == card.id }, onDismiss = { paying = null }, onPaid = onBillPaid)
     }
@@ -124,7 +126,7 @@ private fun newLabel(kind: IouKind) = when (kind) {
 
 /** A card or lender: "₱X owed", when it's due, and the minimum. */
 @Composable
-private fun CreditRow(card: CreditAccounts, today: LocalDate, plans: List<CardPlanLine>, onCharge: () -> Unit, onPay: () -> Unit) {
+private fun CreditRow(card: CreditAccounts, today: LocalDate, plans: List<CardPlanLine>, onCharge: () -> Unit, onPay: () -> Unit, onBorrow: () -> Unit) {
     val c = TrackchingTheme.colors
     Row(
         Modifier.fillMaxWidth().background(c.band).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -158,6 +160,8 @@ private fun CreditRow(card: CreditAccounts, today: LocalDate, plans: List<CardPl
             TextButton(onClick = onPay, enabled = card.owedNow > 0) {
                 Text("PAY BILL", color = if (card.owedNow > 0) c.orangeInk else c.ink2, fontWeight = FontWeight.Bold)
             }
+            // P3-18: a cash loan, like GLoan or a cash advance.
+            TextButton(onClick = onBorrow) { Text("BORROW", color = c.orangeInk, fontWeight = FontWeight.Bold) }
         }
     }
 }

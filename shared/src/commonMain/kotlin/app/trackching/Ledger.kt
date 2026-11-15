@@ -905,6 +905,27 @@ class Ledger(private val db: TrackchingDatabase) {
         txnId
     }
 
+    /**
+     * Borrow (P3-18): a cash loan from a credit account, like GLoan or a cash advance.
+     * The money is a transfer from the card into [intoAccountId], so it isn't income, and what's owed goes up.
+     * The plan works like a purchase's (P3-15): each payment's interest part is spending when it's paid.
+     * Returns the transfer's id.
+     */
+    fun borrow(cardId: Long, borrowed: Long, intoAccountId: Long, plan: NewCardPlan, occurredAt: Long): Long = db.transactionWithResult {
+        require(isCredit(cardId)) { "Borrow from a credit account" }
+        require(!isCredit(intoAccountId)) { "The money goes into cash, bank or e-wallet" }
+        require(plan.payments.isNotEmpty()) { "A plan needs payments" }
+        require(plan.payments.sumOf { it.centavos } >= borrowed) { LoanShort }
+        require(plan.payments.sumOf { it.interest } == plan.payments.sumOf { it.centavos } - borrowed) { "The interest parts don't add up" }
+        val txnId = insert("TRANSFER", borrowed, cardId, intoAccountId, null, occurredAt, null)
+        db.creditQueries.insertPlan(cardId, plan.name.trim().ifEmpty { "Cash loan" }, borrowed, txnId)
+        val planId = db.creditQueries.lastId().executeAsOne()
+        plan.payments.forEachIndexed { i, p ->
+            db.creditQueries.insertInstallment(planId, i + 1L, p.dueOn.toString(), p.centavos, p.interest)
+        }
+        txnId
+    }
+
     /** Every card plan with payments still waiting, re-sent when one is paid. */
     fun cardPlanLines(): Flow<List<CardPlanLine>> =
         db.creditQueries.allCardPayments().asFlow().mapToList(Dispatchers.Default).map(::cardPlanLines)
