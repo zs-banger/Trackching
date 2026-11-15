@@ -1,0 +1,88 @@
+-- People you have IOUs with. Remembered so the name field can suggest them.
+CREATE TABLE person (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK (length(trim(name)) > 0)
+);
+
+-- One IOU. kind: OWE = I owe them, OWED = they owe me, HOLDING = I'm keeping their money.
+-- opened_on / due_on are 'YYYY-MM-DD', like event.
+-- interest_value: centavos for FLAT, basis points a month for MONTHLY (500 = 5.00%).
+-- txn_id: the 'IOU' transaction that moved the money in or out of my account.
+CREATE TABLE iou (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL CHECK (kind IN ('OWE', 'OWED', 'HOLDING')),
+    person_id INTEGER NOT NULL REFERENCES person(id),
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    what_for TEXT NOT NULL DEFAULT '',
+    opened_on TEXT NOT NULL,
+    due_on TEXT,
+    interest_kind TEXT NOT NULL DEFAULT 'NONE' CHECK (interest_kind IN ('NONE', 'FLAT', 'MONTHLY')),
+    interest_value INTEGER NOT NULL DEFAULT 0 CHECK (interest_value >= 0),
+    note TEXT NOT NULL DEFAULT '',
+    txn_id INTEGER REFERENCES txn(id),
+    CHECK (kind <> 'HOLDING' OR interest_kind = 'NONE'),
+    CHECK (interest_kind <> 'MONTHLY' OR due_on IS NOT NULL),
+    CHECK (due_on IS NULL OR due_on >= opened_on)
+);
+
+-- One payment on an IOU, split into principal and interest. The money itself is txn_id (P3-9).
+CREATE TABLE iou_payment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    iou_id INTEGER NOT NULL REFERENCES iou(id),
+    txn_id INTEGER NOT NULL REFERENCES txn(id),
+    principal_centavos INTEGER NOT NULL CHECK (principal_centavos >= 0),
+    interest_centavos INTEGER NOT NULL DEFAULT 0 CHECK (interest_centavos >= 0)
+);
+
+-- Does nothing if the name is already there ("juan" counts as "Juan").
+addPerson:
+INSERT OR IGNORE INTO person(name) VALUES (?);
+
+personId:
+SELECT id FROM person WHERE name = ?;
+
+-- Names that start with what's typed, the most recently used first.
+namesLike:
+SELECT p.name FROM person p
+LEFT JOIN iou i ON i.person_id = p.id
+WHERE p.name LIKE :typed || '%'
+GROUP BY p.id
+ORDER BY MAX(i.id) DESC, p.name
+LIMIT 5;
+
+insert:
+INSERT INTO iou(kind, person_id, centavos, what_for, opened_on, due_on, interest_kind, interest_value, note, txn_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+lastId:
+SELECT last_insert_rowid();
+
+byId:
+SELECT * FROM iou WHERE id = ?;
+
+paymentsOf:
+SELECT * FROM iou_payment WHERE iou_id = ? ORDER BY id;
+
+eraseAll {
+    DELETE FROM iou_payment;
+    DELETE FROM iou;
+    DELETE FROM person;
+}
+
+backupPeople:
+SELECT * FROM person ORDER BY id;
+
+backupIous:
+SELECT * FROM iou ORDER BY id;
+
+backupPayments:
+SELECT * FROM iou_payment ORDER BY id;
+
+backupInsertPerson:
+INSERT INTO person(id, name) VALUES (?, ?);
+
+backupInsertIou:
+INSERT INTO iou VALUES ?;
+
+backupInsertPayment:
+INSERT INTO iou_payment VALUES ?;
