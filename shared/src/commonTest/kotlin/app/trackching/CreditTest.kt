@@ -80,4 +80,10 @@ class CreditTest {
         assertNull(form.dueDayNumber)
         assertEquals(10_000, form.startingCentavos)
     }
+
+    @Test
+    fun theChargeNoteNamesTheCard() = assertEquals(
+        "Saved as an expense under Fees & Charges, and added to what you owe on BPI Card.",
+        chargeNote("BPI Card"),
+    )
 }
