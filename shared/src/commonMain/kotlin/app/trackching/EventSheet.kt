@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +44,7 @@ private enum class Picking { Start, End }
 /** Events repeat by the day, week or month. Never by the year. */
 private val EventUnits = listOf(RepeatUnit.DAY, RepeatUnit.WEEK, RepeatUnit.MONTH)
 
-/** "New event": name, start date, optional end date. */
+/** "New event": name, start date, optional end date, repeat, or occasional (P3-19). */
 @OptIn(ExperimentalTime::class)
 @Composable
 fun EventSheet(
@@ -73,34 +76,58 @@ fun EventSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Label("Starts")
-            Chip(dateLabel(form.start), selected = true, onClick = { picking = Picking.Start })
-
-            Label("Ends")
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("No end date", selected = form.end == null, onClick = { form.end = null })
-                Chip(
-                    form.end?.let { dateLabel(it) } ?: "Pick a date",
-                    selected = form.end != null,
-                    onClick = { picking = Picking.End },
-                )
-            }
-
-            Label("Repeat")
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("Doesn't repeat", selected = form.repeatUnit == null, onClick = { form.repeatUnit = null })
-                EventUnits.forEach { u ->
-                    Chip(u.many.replaceFirstChar { it.uppercase() }, selected = form.repeatUnit == u, onClick = { form.repeatUnit = u })
+            if (editing == null) {
+                // "Occasional" only when adding: turning a dated event into runs (or back) isn't in P3-19.
+                Row(
+                    Modifier.fillMaxWidth()
+                        .toggleable(value = form.occasional, role = Role.Checkbox, onValueChange = { form.occasional = it }),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Checkbox(checked = form.occasional, onCheckedChange = null) // the row handles the tap
+                    Column {
+                        Text("Occasional", color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Text("Happens now and then, like trips. Each time gets its own dates.", color = c.ink2, fontSize = 13.sp)
+                    }
                 }
             }
-            form.repeatUnit?.let { unit ->
-                Stepper(
-                    label = "Every",
-                    value = form.repeatEvery,
-                    after = if (form.repeatEvery == 1) unit.one else unit.many,
-                    onStep = form::stepEvery,
-                )
-                Text("Each ${unit.one} gets its own total.", color = c.ink2, fontSize = 13.sp)
+
+            if (editing?.occasional == true) {
+                Text("Add or change dates from the event's screen.", color = c.ink2, fontSize = 13.sp)
+            } else {
+                Label(if (form.occasional) "First time starts" else "Starts")
+                Chip(dateLabel(form.start), selected = true, onClick = { picking = Picking.Start })
+
+                Label(if (form.occasional) "First time ends" else "Ends")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (!form.occasional) {
+                        Chip("No end date", selected = form.end == null, onClick = { form.end = null })
+                    }
+                    Chip(
+                        form.end?.let { dateLabel(it) } ?: "Pick a date",
+                        selected = form.end != null,
+                        onClick = { picking = Picking.End },
+                    )
+                }
+            }
+
+            if (!form.occasional) {
+                Label("Repeat")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip("Doesn't repeat", selected = form.repeatUnit == null, onClick = { form.repeatUnit = null })
+                    EventUnits.forEach { u ->
+                        Chip(u.many.replaceFirstChar { it.uppercase() }, selected = form.repeatUnit == u, onClick = { form.repeatUnit = u })
+                    }
+                }
+                form.repeatUnit?.let { unit ->
+                    Stepper(
+                        label = "Every",
+                        value = form.repeatEvery,
+                        after = if (form.repeatEvery == 1) unit.one else unit.many,
+                        onStep = form::stepEvery,
+                    )
+                    Text("Each ${unit.one} gets its own total.", color = c.ink2, fontSize = 13.sp)
+                }
             }
             Text(form.error ?: "", color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 
@@ -108,7 +135,7 @@ fun EventSheet(
                 Modifier.fillMaxWidth().clickable(enabled = form.canSave && !saved, role = Role.Button) {
                     if (saved) return@clickable
                     saved = true
-                    if (editing == null) ledger.addEvent(form.name, form.start, form.end, form.repeat)
+                    if (editing == null) ledger.addEvent(form.name, form.start, form.end, form.repeat, form.occasional)
                     else ledger.updateEvent(editing.id, form.name, form.start, form.end, form.repeat)
                     onSaved()
                     close()
