@@ -1178,6 +1178,76 @@ class Ledger(private val db: TrackchingDatabase) {
         db.settingQueries.put("last_backup", today.toString())
     }
 
+    /** A Reminders switch (P3-11). Off until you turn it on. */
+    fun reminderOn(switch: ReminderSwitch): Boolean = db.settingQueries.get(switch.key).executeAsOneOrNull() == "true"
+
+    fun setReminder(switch: ReminderSwitch, on: Boolean) {
+        db.settingQueries.put(switch.key, on.toString())
+    }
+
+    fun anyReminderOn(): Boolean = ReminderSwitch.entries.any { reminderOn(it) }
+
+    /**
+     * The daily check (P3-11): what to remind about since the last check, for the switches that are on.
+     * It notes today as checked, so a second run today returns nothing.
+     * Amounts are masked when HIDE ₱ is on, since notifications show on the lock screen.
+     */
+    fun reminders(today: LocalDate): List<Reminder> = db.transactionWithResult {
+        val checked = db.settingQueries.get("reminders_checked").executeAsOneOrNull()?.let(LocalDate::parse)
+        val days = reminderDays(checked, today)
+        db.settingQueries.put("reminders_checked", today.toString())
+        if (days.isEmpty()) return@transactionWithResult emptyList<Reminder>()
+        val hidden = amountsHidden()
+        val show: (String) -> String = { masked(it, hidden) }
+        fun money(c: Long) = show(formatAmount(c, AmountKind.Transfer))
+        val out = mutableListOf<Reminder>()
+        if (reminderOn(ReminderSwitch.Ious)) {
+            val things = mutableListOf<DueThing>()
+            db.iouQueries.iouList().executeAsList().map { it.toRow(today) }.forEach { row ->
+                val due = row.due ?: return@forEach
+                if (row.settled) return@forEach
+                things += DueThing(
+                    "iou-${row.id}-$due", due, "IOU due today",
+                    iouReminderText(row.kind, row.person, row.left, row.whatFor, show), ReminderTarget.Ious, "IOU overdue",
+                )
+            }
+            dueInstallments(today).forEach { p ->
+                things += DueThing(
+                    "part-${p.id}", LocalDate.parse(p.due_on), "IOU payment due today",
+                    "${p.person} · payment ${p.n} of ${p.total_parts} · ${money(p.centavos)}", ReminderTarget.CheckIn, "IOU payment overdue",
+                )
+            }
+            dueCardPayments(today).forEach { p ->
+                things += DueThing(
+                    "card-payment-${p.id}", LocalDate.parse(p.due_on), "Card payment due today",
+                    "${p.account} · ${p.name} · payment ${p.n} of ${p.total_parts} · ${money(p.centavos)}", ReminderTarget.CheckIn,
+                )
+            }
+            db.accountQueries.creditAccounts().executeAsList().forEach { card ->
+                val dueDay = card.due_day?.toInt() ?: return@forEach
+                if (card.owedNow <= 0) return@forEach
+                days.filter { nextDueDate(dueDay, it) == it }.forEach { d ->
+                    val minimum = card.minimum_centavos?.let { " · minimum ${money(it)}" }.orEmpty()
+                    things += DueThing("card-${card.id}-$d", d, "Credit bill due today", "${card.name} · ${money(card.owedNow)} owed$minimum", ReminderTarget.Ious)
+                }
+            }
+            out += remindersFor(things, days)
+        }
+        if (reminderOn(ReminderSwitch.Repeats)) {
+            val labels = repeatLabels()
+            val titles = dueRepeats(today).filter { it.date in days }.map { labels[it.rule.id]?.title ?: "Repeat" }
+            repeatReminder(titles, today)?.let { out += it }
+        }
+        if (reminderOn(ReminderSwitch.Backup)) {
+            val nudged = db.settingQueries.get("backup_nudged").executeAsOneOrNull()?.let(LocalDate::parse)
+            backupReminder(lastBackup(), nudged, today)?.let {
+                out += it
+                db.settingQueries.put("backup_nudged", today.toString())
+            }
+        }
+        out
+    }
+
     /** Every transaction as a spreadsheet, oldest first. */
     fun csv(zone: TimeZone): String {
         val header = csvLine(listOf("date", "type", "amount", "account", "to account", "category", "subcategory", "event", "person"))
