@@ -147,7 +147,8 @@ private fun MainShell(
     val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
     val dueCount by remember(ledger) { ledger.dueCount(today) }.collectAsState(initial = 0)
     val overdue by remember(ledger) { ledger.overdueCount(today) }.collectAsState(initial = 0)
-    fun newIouComingSoon() { scope.launch { snackbar.showSnackbar("Adding IOUs comes in the next update") } } // P3-8
+    var newIou by remember { mutableStateOf<IouKind?>(null) }   // New IOU, starting on this kind (P3-8)
+    var editingIou by remember { mutableStateOf<Long?>(null) }  // Edit IOU: its id (P3-8)
     // Once per app start: anything due opens the check-in.
     LaunchedEffect(Unit) {
         if (ledger.dueRepeats(today).isNotEmpty()) checkingIn = true
@@ -221,7 +222,7 @@ private fun MainShell(
                             Tab.Home, Tab.Transactions -> adding = true
                             Tab.Categories -> addingCategory = true
                             Tab.Events -> addingEvent = true
-                            Tab.Ious -> newIouComingSoon()
+                            Tab.Ious -> newIou = IouKind.OWE
                         }
                     },
                     color = c.blue,
@@ -272,7 +273,7 @@ private fun MainShell(
                             today = today,
                             onOpenPerson = { line, kind -> open(Page.PersonIous(line.personId, line.person, kind)) },
                             onOpenDueSoon = { open(Page.DueSoon) },
-                            onNew = ::newIouComingSoon,
+                            onNew = { newIou = it },
                             onOpenIou = { open(Page.IouDetail(it, "IOUs")) },
                         )
                     }
@@ -293,7 +294,7 @@ private fun MainShell(
                         backTo = page.from,
                         onBack = ::back,
                         onRecord = { scope.launch { snackbar.showSnackbar("Recording payments comes in a later update") } }, // P3-9
-                        onEdit = { scope.launch { snackbar.showSnackbar("Editing IOUs comes in the next update") } },        // P3-8
+                        onEdit = { editingIou = page.id },
                         onDeletedPayment = { deleted -> showUndo("Payment deleted") { ledger.restorePayment(deleted) } },
                     )
                     Page.Settings -> SettingsScreen(
@@ -391,6 +392,22 @@ private fun MainShell(
                         else showUndo(runMessage("Dates changed", changed)) { ledger.undoRun(changed) }
                     },
                     onDeleted = { deleted -> showUndo(runMessage("Dates deleted", deleted)) { ledger.undoRun(deleted) } },
+                )
+            }
+            newIou?.let { kind ->
+                IouSheet(
+                    ledger,
+                    startKind = kind,
+                    onDismiss = { newIou = null },
+                    onSaved = { scope.launch { snackbar.showSnackbar("IOU saved") } },
+                )
+            }
+            editingIou?.let { id ->
+                IouSheet(
+                    ledger,
+                    editing = id,
+                    onDismiss = { editingIou = null },
+                    onSaved = { scope.launch { snackbar.showSnackbar("IOU saved") } },
                 )
             }
             if (managingAccounts) {
