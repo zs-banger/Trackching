@@ -85,8 +85,11 @@ fun TxnSheet(
     val newPlan = if (inParts) cardPlan.plan(form.centavos, categoryName) else null
     val repeatReady = editing != null || inParts || !form.repeat.on || form.repeat.rule(startDay) != null
     val planReady = !inParts || newPlan != null
+    // Audit #2, #4: IOU spending and card plan transactions change with the IOU or the plan, not here.
+    val linked = remember { editing?.let { ledger.linkedTo(it.id) } }
 
     val hint = when {
+        linked != null -> linked
         form.centavos == 0L -> "Type the amount"
         form.kind == AmountKind.Transfer && accounts.size < 2 -> "Add a second account to transfer"
         form.kind == AmountKind.Transfer && form.toAccountId == null -> "Pick where it goes"
@@ -101,7 +104,7 @@ fun TxnSheet(
         title = if (editing != null) "Edit transaction" else "New transaction",
         onDismiss = onDismiss,
         action = { close ->
-            if (editing != null) {
+            if (editing != null && linked == null) {
                 TextButton(onClick = {
                     ledger.delete(editing.id)?.let(onDeleted)
                     close()
@@ -212,7 +215,7 @@ fun TxnSheet(
 
         Keypad(
             onKey = form::onKey,
-            saveEnabled = form.canSave && repeatReady && planReady && !saved,
+            saveEnabled = form.canSave && repeatReady && planReady && linked == null && !saved,
             onSave = {
                 if (saved) return@Keypad
                 saved = true

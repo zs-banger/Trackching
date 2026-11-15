@@ -81,3 +81,8 @@ data class NewIou(
     /** Paid back in parts (P3-17). They add up to the amount plus interest; the last one is the due date. */
     val installments: List<PlannedPayment>? = null,
 )
+
+/** Audit #5: Edit IOU after a payment. */
+const val KindLocked = "The kind can't change once a payment is recorded"
+
+fun alreadyPaidMessage(paid: Long): String = "${formatAmount(paid, AmountKind.Transfer)} is already paid, so it can't be less than that"

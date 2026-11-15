@@ -222,3 +222,11 @@ SELECT * FROM iou_installment ORDER BY id;
 backupInsertInstallment:
 INSERT INTO iou_installment VALUES ?;
 
+
+-- Phase 3 fixes (audit #2): the IOU whose "paid for" spending this transaction is.
+iouOfSpend:
+SELECT p.name FROM iou i JOIN person p ON p.id = i.person_id WHERE i.spend_txn_id = ?;
+
+-- Audit #5: what's been paid on an IOU, interest included.
+paidOn:
+SELECT CAST(COALESCE(SUM(principal_centavos + interest_centavos), 0) AS INTEGER) FROM iou_payment WHERE iou_id = ?;

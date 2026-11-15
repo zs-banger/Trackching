@@ -29,13 +29,19 @@ import androidx.compose.ui.unit.sp
 fun DeleteCategorySheet(ledger: Ledger, categoryId: Long, name: String, hasSubs: Boolean, onDismiss: () -> Unit) {
     val c = TrackchingTheme.colors
     val usage = remember(categoryId) { ledger.categoryUsage(categoryId) }
+    val repeats = remember(categoryId) { ledger.categoryRepeats(categoryId) } // audit #1: they move too
     val targets = remember(categoryId) { ledger.moveTargets(categoryId) }
     var moveTo by remember { mutableStateOf<Long?>(null) }
     var done by remember { mutableStateOf(false) }
 
     val lastOne = targets.isEmpty() && !hasSubs
-    val canDelete = !done && !lastOne && (usage == 0L || moveTo != null)
-    val label = if (usage == 0L) "DELETE" else "MOVE $usage & DELETE"
+    val needsMove = usage > 0 || repeats > 0
+    val canDelete = !done && !lastOne && (!needsMove || moveTo != null)
+    val label = when {
+        !needsMove -> "DELETE"
+        usage == 0L -> "MOVE & DELETE"
+        else -> "MOVE $usage & DELETE"
+    }
 
     TrackchingSheet(title = "Delete \"$name\"", onDismiss = onDismiss) { close ->
         Column(
@@ -47,10 +53,10 @@ fun DeleteCategorySheet(ledger: Ledger, categoryId: Long, name: String, hasSubs:
             }
             when {
                 lastOne -> Text("This is your last category of its kind, so it can't be deleted.", color = c.expense, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                usage == 0L -> Text("No transactions use it.", color = c.ink2, fontSize = 15.sp)
+                !needsMove -> Text("No transactions use it.", color = c.ink2, fontSize = 15.sp)
                 else -> {
                     Text(
-                        "$usage ${if (usage == 1L) "transaction uses" else "transactions use"} it. Move them to:",
+                        "${categoryUsageLine(usage, repeats)} Move them to:",
                         color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                     )
                     Column(Modifier.selectableGroup()) {
