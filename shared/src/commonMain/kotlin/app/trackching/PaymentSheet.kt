@@ -1,5 +1,6 @@
 package app.trackching
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +91,25 @@ fun PaymentSheet(ledger: Ledger, iouId: Long, onDismiss: () -> Unit, onSaved: (p
                 )
             }
 
+            // P3-16: more than what's left. Holding never gets here (it's an error instead).
+            if (form.extra > 0) {
+                Column(
+                    Modifier.fillMaxWidth().background(c.band).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(form.extraQuestion, color = c.ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (context.kind == IouKind.OWED) "Yes saves it as income under Interest › From IOUs."
+                        else "Yes saves it under Fees & Charges › Interest.",
+                        color = c.ink2, fontSize = 13.sp,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip("Yes, it's interest", selected = form.countExtra == true, onClick = { form.countExtra = true })
+                        Chip("No, pay what's left", selected = false, onClick = { form.capAtLeft() })
+                    }
+                }
+            }
+
             Text(context.kind.paymentAccountLabel().uppercase(), color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 accounts.forEach { a -> Chip(a.name, selected = form.accountId == a.id, onClick = { form.accountId = a.id }) }
@@ -102,13 +122,14 @@ fun PaymentSheet(ledger: Ledger, iouId: Long, onDismiss: () -> Unit, onSaved: (p
 
             OffsetBlock(
                 Modifier.fillMaxWidth().clickable(enabled = form.canSave && !saved, role = Role.Button) {
-                    val total = form.centavos ?: return@clickable
+                    val total = form.onIou ?: return@clickable
                     val split = form.split ?: return@clickable
                     val account = form.accountId ?: return@clickable
                     if (saved) return@clickable
                     saved = true
                     val at = atTimeOfDay(form.date, Clock.System.now().toEpochMilliseconds())
-                    onSaved(ledger.recordPayment(iouId, total, split.interest, account, at))
+                    val extra = if (form.countExtra == true) form.extra else 0
+                    onSaved(ledger.recordPayment(iouId, total, split.interest, account, at, extraAsInterest = extra))
                     close()
                 },
                 color = if (form.canSave) c.orange else c.line,
