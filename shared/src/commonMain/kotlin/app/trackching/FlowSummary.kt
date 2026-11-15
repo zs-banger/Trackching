@@ -47,6 +47,10 @@ data class Flow(
     val expenses: Long,
     val others: Int,
     val adjustments: Long,
+    /** Paying back what I owe (P3-9). Not spending, so it doesn't change Net. */
+    val debtPayments: Long = 0,
+    /** Money I was holding, given back (P3-9). Not spending either. */
+    val handedBack: Long = 0,
 ) {
     val net: Long get() = income - expenses
 }

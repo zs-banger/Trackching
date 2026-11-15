@@ -14,6 +14,7 @@ import app.trackching.db.ExpensesByEvent
 import app.trackching.db.Iou_payment
 import app.trackching.db.IouDetail
 import app.trackching.db.PaymentRows
+import app.trackching.db.PaymentMoves
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -689,6 +690,46 @@ class Ledger(private val db: TrackchingDatabase) {
         val p = deleted.payment
         db.iouQueries.restorePayment(p.id, p.iou_id, p.txn_id, p.principal_centavos, p.interest_centavos)
     }
+
+    /** What the payment sheet needs: the kind, the person, what's left and the interest still due (P3-9). */
+    fun paymentContext(iouId: Long): PaymentContext {
+        val detail = db.iouQueries.iouDetail(iouId).executeAsOne()
+        val paid = db.iouQueries.paymentsOf(iouId).executeAsList().map { Paid(it.principal_centavos, it.interest_centavos) }
+        val terms = detail.terms()
+        return PaymentContext(IouKind.valueOf(detail.kind), detail.person, leftOf(terms, paid), interestDue(terms, paid))
+    }
+
+    /** Each account's own money: its balance minus what I'm still holding in it for others. Only accounts that hold some. */
+    fun ownMoney(): Map<Long, Long> {
+        val held = db.iouQueries.heldByAccount().executeAsList()
+            .groupBy { it.account_id }
+            .mapValues { (_, rows) -> rows.sumOf { (it.centavos - it.paid).coerceAtLeast(0) } }
+            .filterValues { it > 0 }
+        return held.mapValues { (account, holding) -> balance(account) - holding }
+    }
+
+    /**
+     * Records a payment (P3-9): Record payment, Payment received or Hand back.
+     * The money moves in [accountId] as an 'IOU' transaction, the other way from when the IOU started.
+     * Returns the payment's id.
+     */
+    fun recordPayment(iouId: Long, centavos: Long, interest: Long, accountId: Long, occurredAt: Long): Long =
+        db.transactionWithResult {
+            val context = paymentContext(iouId)
+            require(centavos > 0) { "A payment needs an amount" }
+            require(centavos <= context.left) { "That's more than what's left" }
+            require(interest in 0..minOf(centavos, context.interestDue)) { "That interest part doesn't fit" }
+            if (context.kind == IouKind.OWE) {
+                ownMoney()[accountId]?.let { own -> require(centavos <= own) { "That would use money you're holding" } }
+            }
+            db.txnQueries.insert(IOU, -context.kind.sign * centavos, accountId, null, null, occurredAt)
+            val txnId = db.txnQueries.lastId().executeAsOne()
+            db.iouQueries.insertPayment(iouId, txnId, centavos - interest, interest)
+            db.iouQueries.lastId().executeAsOne()
+        }
+
+    /** Every payment's money, for the Flow summary. Re-sent when a payment changes. */
+    fun paymentMoves(): Flow<List<PaymentMoves>> = db.iouQueries.paymentMoves().asFlow().mapToList(Dispatchers.Default)
 
     fun amountsHidden(): Boolean =
         db.settingQueries.get("amounts_hidden").executeAsOneOrNull() == "true"

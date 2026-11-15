@@ -137,3 +137,21 @@ DELETE FROM iou_payment WHERE id = ?;
 -- Puts a payment back with its old id, for Undo.
 restorePayment:
 INSERT INTO iou_payment(id, iou_id, txn_id, principal_centavos, interest_centavos) VALUES (?, ?, ?, ?, ?);
+
+-- Money I'm holding for others, by the account it came into (P3-9). Holding has no interest.
+heldByAccount:
+SELECT t.account_id, i.centavos,
+       CAST(COALESCE(SUM(ip.principal_centavos + ip.interest_centavos), 0) AS INTEGER) AS paid
+FROM iou i
+JOIN txn t ON t.id = i.txn_id
+LEFT JOIN iou_payment ip ON ip.iou_id = i.id
+WHERE i.kind = 'HOLDING'
+GROUP BY i.id;
+
+-- Every payment's money, for the Flow summary's Debt payments and Handed back lines (P3-9).
+paymentMoves:
+SELECT t.occurred_at, t.account_id, i.kind,
+       CAST(ip.principal_centavos + ip.interest_centavos AS INTEGER) AS centavos
+FROM iou_payment ip
+JOIN txn t ON t.id = ip.txn_id
+JOIN iou i ON i.id = ip.iou_id;
