@@ -33,8 +33,12 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
+import kotlinx.datetime.atStartOfDayIn
 
 /** A deleted event and the transactions it had, so Undo can put both back. */
+/** What Undo needs after a run's dates are changed or deleted (P3-20): the run as it was, and what got untagged. */
+data class RunUndo(val run: Event_run, val untagged: List<Long>, val deleted: Boolean)
+
 data class DeletedEvent(val event: Event, val txnIds: List<Long>, val runs: List<Event_run> = emptyList())
 
 /** One date a repeat is waiting on. [n] is which time it is (0 = the start date). */
@@ -333,6 +337,52 @@ class Ledger(private val db: TrackchingDatabase) {
         val id = db.eventQueries.lastId().executeAsOne()
         db.eventQueries.fitToRuns(eventId)
         id
+    }
+
+    /** The event's transactions dated inside a run: first day's midnight up to the midnight after the last day. */
+    private fun idsInRun(eventId: Long, first: String, last: String, zone: TimeZone): List<Long> {
+        val from = LocalDate.parse(first).atStartOfDayIn(zone).toEpochMilliseconds()
+        val until = LocalDate.parse(last).plus(1, DateTimeUnit.DAY).atStartOfDayIn(zone).toEpochMilliseconds()
+        return db.txnQueries.idsForEventBetween(eventId, from, until).executeAsList()
+    }
+
+    /**
+     * Changes a run's dates (P3-20). Same overlap rule as adding one, but it can't clash with itself.
+     * Transactions that fall outside the new dates are untagged: they'd belong to no run. Returns what Undo needs.
+     */
+    fun changeRun(runId: Long, first: LocalDate, last: LocalDate, zone: TimeZone): RunUndo = db.transactionWithResult {
+        val old = db.eventQueries.runById(runId).executeAsOne()
+        val runs = db.eventQueries.runsOf(old.event_id).executeAsList().map { it.toRun() }
+        runError(runs, first, last, except = runId)?.let { throw IllegalArgumentException(it) }
+        val before = idsInRun(old.event_id, old.start_date, old.end_date, zone)
+        db.eventQueries.updateRun(first.toString(), last.toString(), runId)
+        val after = idsInRun(old.event_id, first.toString(), last.toString(), zone).toSet()
+        val untagged = before.filterNot { it in after }
+        untagged.forEach { db.txnQueries.setEvent(null, it) }
+        db.eventQueries.fitToRuns(old.event_id)
+        RunUndo(old, untagged, deleted = false)
+    }
+
+    /** Deletes a run (P3-20). Its transactions stay but are untagged. The event's only run can't go. */
+    fun deleteRun(runId: Long, zone: TimeZone): RunUndo = db.transactionWithResult {
+        val old = db.eventQueries.runById(runId).executeAsOne()
+        require(db.eventQueries.runsOf(old.event_id).executeAsList().size > 1) {
+            "This is the event's only time. Delete the event instead"
+        }
+        val untagged = idsInRun(old.event_id, old.start_date, old.end_date, zone)
+        untagged.forEach { db.txnQueries.setEvent(null, it) }
+        db.eventQueries.deleteRun(runId)
+        db.eventQueries.fitToRuns(old.event_id)
+        RunUndo(old, untagged, deleted = true)
+    }
+
+    /** Undo for changeRun and deleteRun: the old dates come back and the transactions are tagged again. */
+    fun undoRun(undo: RunUndo) = db.transaction {
+        val r = undo.run
+        if (undo.deleted) db.eventQueries.restoreRun(r.id, r.event_id, r.start_date, r.end_date)
+        else db.eventQueries.updateRun(r.start_date, r.end_date, r.id)
+        undo.untagged.forEach { db.txnQueries.setEvent(r.event_id, it) }
+        db.eventQueries.fitToRuns(r.event_id)
     }
 
     /** Every event with its spending. Re-sent when an event or a transaction changes. */
