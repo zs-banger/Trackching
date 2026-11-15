@@ -52,7 +52,7 @@ fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
                         val type = form.type
                         val starting = form.startingCentavos
                         if (type != null && starting != null) {
-                            ledger.addAccount(form.name, type, form.color, starting)
+                            ledger.addAccount(form.name, type, form.color, starting, form.dueDayNumber, form.minimumCentavos)
                             close()
                         }
                     }),
@@ -71,9 +71,12 @@ fun AccountSheet(ledger: Ledger, onDismiss: () -> Unit) {
     }
 }
 
-/** Name, type, color and starting balance. Used by New account and by setup. Put it in a Column. */
+/**
+ * Name, type, color and starting balance. Used by New account and by setup. Put it in a Column.
+ * Setup's first account holds money, so it leaves Credit out ([allowCredit]).
+ */
 @Composable
-fun AccountFields(form: AccountForm) {
+fun AccountFields(form: AccountForm, allowCredit: Boolean = true) {
     val c = TrackchingTheme.colors
     OutlinedTextField(
         value = form.name,
@@ -87,7 +90,7 @@ fun AccountFields(form: AccountForm) {
 
     Label("Type")
     Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        AccountType.entries.forEach { type ->
+        AccountType.entries.filter { allowCredit || it != AccountType.Credit }.forEach { type ->
             Chip(type.label, selected = form.type == type, onClick = { form.type = type })
         }
     }
@@ -113,12 +116,35 @@ fun AccountFields(form: AccountForm) {
     OutlinedTextField(
         value = form.starting,
         onValueChange = { form.starting = it },
-        label = { Text("Starting balance (₱)") },
-        supportingText = { Text("What's in it today. This isn't counted as income.") },
+        label = { Text(if (form.isCredit) "Already owed (₱, optional)" else "Starting balance (₱)") },
+        supportingText = {
+            Text(if (form.isCredit) "What you owe on it today. This isn't counted as spending." else "What's in it today. This isn't counted as income.")
+        },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = Modifier.fillMaxWidth(),
     )
+
+    // P3-12: a card's or lender's terms. No limit field.
+    if (form.isCredit) {
+        OutlinedTextField(
+            value = form.dueDay,
+            onValueChange = { form.dueDay = it.filter(Char::isDigit).take(2) },
+            label = { Text("Due day (optional)") },
+            supportingText = { Text("The day of the month the bill is due, like 15") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = form.minimum,
+            onValueChange = { form.minimum = it },
+            label = { Text("Minimum due (₱, optional)") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 
     Text(form.error ?: "", color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 }

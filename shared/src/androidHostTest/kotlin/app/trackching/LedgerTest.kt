@@ -240,8 +240,8 @@ class LedgerTest {
 
     @Test
     fun databaseAlsoBlocksDuplicates() {
-        db.accountQueries.create("BPI", "BANK", AccountColors[2], 0)
-        assertFails { db.accountQueries.create("bpi", "BANK", AccountColors[2], 0) }
+        db.accountQueries.create("BPI", "BANK", AccountColors[2], 0, null, null)
+        assertFails { db.accountQueries.create("bpi", "BANK", AccountColors[2], 0, null, null) }
     }
 
     @Test
@@ -756,7 +756,7 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 8", "\"format\": 1")
+            .replace("\"format\": 9", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
@@ -1524,5 +1524,64 @@ class LedgerTest {
         assertTrue(ledger.holdsMoney(cash()))
         val e = assertFailsWith<IllegalArgumentException> { ledger.archive(cash()) }
         assertEquals(HandBackFirst, e.message)
+    }
+
+    // P3-12: credit accounts
+
+    private fun card(owed: Long = 0, dueDay: Int? = 20, minimum: Long? = 50_000) =
+        ledger.addAccount("BPI Card", AccountType.Credit, AccountColors.first(), -owed, dueDay, minimum)
+
+    private fun owed(id: Long) = db.accountQueries.creditAccounts().executeAsList().single { it.id == id }.owedNow
+
+    @Test
+    fun aPurchaseOnCreditIsSpendingAndAddsToWhatsOwed() {
+        val bpi = card(owed = 10_000)
+        ledger.logExpense(30_000, category("Meals"), bpi, 100)
+        assertEquals(40_000, owed(bpi))
+        assertEquals(30_000, ledger.totals(0, 1_000).spent) // spending on the day it's made
+    }
+
+    @Test
+    fun payingTheBillIsATransferNotSpending() {
+        val bpi = card(owed = 40_000)
+        val before = ledger.balance(cash())
+        ledger.logTransfer(25_000, cash(), bpi, 100)
+        assertEquals(15_000, owed(bpi))
+        assertEquals(before - 25_000, ledger.balance(cash()))
+        assertEquals(0, ledger.totals(0, 1_000).spent)
+    }
+
+    @Test
+    fun creditIsLeftOutOfTheTotalButTakenFromNetWorth() = runBlocking {
+        val before = totalBalance(ledger.balances().first())
+        card(owed = 70_000)
+        assertEquals(before, totalBalance(ledger.balances().first()))
+        val worth = ledger.netWorth(d(2, 1)).first()
+        assertEquals(70_000, worth.onCredit)
+        assertEquals(before - 70_000, worth.worth)
+    }
+
+    @Test
+    fun aCardKeepsItsDueDayAndMinimum() {
+        val bpi = card()
+        val row = db.accountQueries.creditAccounts().executeAsList().single { it.id == bpi }
+        assertEquals(20L to 50_000L, row.due_day to row.minimum_centavos)
+    }
+
+    @Test
+    fun otherAccountsNeverKeepCreditTerms() {
+        val bdo = ledger.addAccount("BDO", AccountType.Bank, AccountColors.first(), 0, 20, 50_000)
+        val row = db.accountQueries.backupAll().executeAsList().single { it.id == bdo }
+        assertNull(row.due_day)
+        assertNull(row.minimum_centavos)
+    }
+
+    @Test
+    fun backupKeepsCreditTerms() {
+        val bpi = card()
+        val file = ledger.backupFile(d(5, 4))
+        ledger.eraseAll()
+        ledger.restore(openBackup(encodeBackup(file)).let { (it as Opened.Ok).file })
+        assertEquals(20L, db.accountQueries.creditAccounts().executeAsList().single { it.id == bpi }.due_day)
     }
 }
