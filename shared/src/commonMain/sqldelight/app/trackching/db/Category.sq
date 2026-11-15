@@ -106,3 +106,7 @@ SELECT * FROM category ORDER BY parent_id IS NOT NULL, id;
 backupInsert:
 INSERT INTO category(id, name, kind, parent_id, color, sort_order, icon)
 VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- One category by kind, main (or none) and name, ignoring case (P3-16).
+findCategory:
+SELECT id FROM category WHERE kind = ? AND parent_id IS ? AND name = ? COLLATE NOCASE LIMIT 1;

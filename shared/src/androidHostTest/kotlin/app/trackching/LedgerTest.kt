@@ -1339,4 +1339,43 @@ class LedgerTest {
         val moves = iouMovesIn(db.iouQueries.paymentMoves().executeAsList(), 0L to 1_000L)
         assertEquals(IouMoves(debtPayments = 20_000, handedBack = 30_000), moves)
     }
+
+    // P3-16: extra paid counts as interest
+
+    private fun txnsIn(categoryId: Long) = db.txnQueries.backupAll().executeAsList().filter { it.category_id == categoryId }
+
+    @Test
+    fun extraReceivedIsInterestIncomeFromIous() {
+        val id = iou(IouKind.OWED)
+        val before = ledger.balance(cash())
+        ledger.recordPayment(id, 50_000, 0, cash(), 1, extraAsInterest = 2_000)
+        val fromIous = ledger.interestCategory("INCOME")
+        assertEquals(listOf("INCOME" to 2_000L), txnsIn(fromIous).map { it.kind to it.centavos })
+        assertEquals(before + 52_000, ledger.balance(cash()))
+        assertEquals(0, ledger.iouLeft(id))
+    }
+
+    @Test
+    fun extraPaidIsAFeesAndChargesInterestExpense() {
+        val id = iou(IouKind.OWE)
+        val before = ledger.balance(cash())
+        ledger.recordPayment(id, 50_000, 0, cash(), 1, extraAsInterest = 1_000)
+        val charge = ledger.interestCategory("EXPENSE")
+        assertEquals(listOf("EXPENSE" to 1_000L), txnsIn(charge).map { it.kind to it.centavos })
+        assertEquals(before - 51_000, ledger.balance(cash()))
+    }
+
+    @Test
+    fun theInterestCategoriesAreMadeOnceAndReused() {
+        assertEquals(ledger.interestCategory("EXPENSE"), ledger.interestCategory("EXPENSE"))
+        // Income › Interest › From IOUs is a starter category, so it's the existing one.
+        val sub = ledger.interestCategory("INCOME")
+        assertEquals("From IOUs", db.categoryQueries.categoryById(sub).executeAsOne().name)
+    }
+
+    @Test
+    fun holdingNeverCountsExtraAsInterest() {
+        val id = iou(IouKind.HOLDING)
+        assertFailsWith<IllegalArgumentException> { ledger.recordPayment(id, 50_000, 0, cash(), 1, extraAsInterest = 1_000) }
+    }
 }
