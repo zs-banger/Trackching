@@ -754,7 +754,7 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 6", "\"format\": 1")
+            .replace("\"format\": 7", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
@@ -1220,5 +1220,64 @@ class LedgerTest {
         ledger.restorePayment(deleted)
         assertEquals(before - 10_000, ledger.balance(cash()))
         assertEquals(40_000, ledger.iouLeft(id))
+    }
+
+    // P3-8: add and edit an IOU
+
+    private fun spendingIn(categoryId: Long) =
+        db.txnQueries.backupAll().executeAsList().filter { it.kind == "EXPENSE" && it.category_id == categoryId }
+
+    @Test
+    fun aFriendPayingForLunchIsSpendingWithNoAccountChange() {
+        val before = ledger.balance(cash())
+        val meals = category("Meals")
+        val id = ledger.addIou(NewIou(IouKind.OWE, "Juan", 25_000, "Lunch", d(1, 15), paidFor = meals), cash(), 0)
+        assertEquals(before, ledger.balance(cash()))
+        assertEquals(listOf(25_000L), spendingIn(meals).map { it.centavos })
+        assertEquals(25_000, ledger.iouLeft(id))
+    }
+
+    @Test
+    fun onlyAnIouIOweCanPayForSomething() {
+        assertFailsWith<IllegalArgumentException> {
+            ledger.addIou(NewIou(IouKind.OWED, "Juan", 25_000, "", d(1, 15), paidFor = category("Meals")), cash(), 0)
+        }
+    }
+
+    @Test
+    fun editingChangesTheIouAndItsMoney() {
+        val before = ledger.balance(cash())
+        val id = iou(IouKind.OWE) // ₱500 came in
+        ledger.updateIou(id, NewIou(IouKind.OWED, "Maria", 30_000, "Rent", d(1, 20)), cash(), 0)
+        assertEquals(before - 30_000, ledger.balance(cash())) // now ₱300 went out
+        val edit = assertNotNull(ledger.iouToEdit(id))
+        assertEquals("Maria", edit.person)
+        assertEquals("OWED", edit.iou.kind)
+        assertEquals("Rent", edit.iou.what_for)
+    }
+
+    @Test
+    fun switchingPaidForOnAndOffAddsAndRemovesTheSpending() {
+        val meals = category("Meals")
+        val before = ledger.balance(cash())
+        val id = iou(IouKind.OWE)
+        ledger.updateIou(id, NewIou(IouKind.OWE, "Juan", 50_000, "", d(1, 15), paidFor = meals), cash(), 0)
+        assertEquals(1, spendingIn(meals).size)
+        assertEquals(before, ledger.balance(cash()))
+
+        ledger.updateIou(id, NewIou(IouKind.OWE, "Juan", 50_000, "", d(1, 15)), cash(), 0)
+        assertEquals(0, spendingIn(meals).size)
+        assertNull(ledger.iouToEdit(id)?.spend)
+        assertEquals(before + 50_000, ledger.balance(cash()))
+    }
+
+    @Test
+    fun whatAnIouPaidForIsBackedUp() {
+        val meals = category("Meals")
+        val id = ledger.addIou(NewIou(IouKind.OWE, "Juan", 25_000, "", d(1, 15), paidFor = meals), cash(), 0)
+        val file = ledger.backupFile(d(11, 15))
+        ledger.eraseAll()
+        ledger.restore(openBackup(encodeBackup(file)).let { (it as Opened.Ok).file })
+        assertEquals(meals, ledger.iouToEdit(id)?.spend?.category_id)
     }
 }
