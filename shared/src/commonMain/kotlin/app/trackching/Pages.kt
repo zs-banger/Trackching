@@ -27,6 +27,12 @@ sealed interface Page {
     /** Transactions for one event, opened from its Flow summary. */
     data class EventHistory(val eventId: Long, val bucket: Bucket, val tab: TypeTab) : Page
 
+    /** One person's IOUs of one kind, opened from the IOUs tab. */
+    data class PersonIous(val personId: Long, val name: String, val kind: IouKind) : Page
+
+    /** Every IOU with a due date, soonest first, opened from the IOUs tab. */
+    data object DueSoon : Page
+
     /** Settings, opened from the gear on Home. */
     data object Settings : Page
 }
