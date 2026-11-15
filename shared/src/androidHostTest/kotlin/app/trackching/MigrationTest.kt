@@ -100,4 +100,14 @@ class MigrationTest {
         assertEquals(50_000, ledger.iouLeft(id))
         assertEquals(50_000 - 12_000, ledger.balance(1))
     }
+
+    @Test
+    fun oldEventsDontRepeat() {
+        val driver = openCopyOfVersion1()
+        driver.execute(null, "INSERT INTO event(name, start_date) VALUES ('Baguio', '2026-12-20')", 0)
+
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
+
+        assertNull(eventRowOf(TrackchingDatabase(driver).eventQueries.byId(1).executeAsOne()).repeat)
+    }
 }

@@ -1,11 +1,13 @@
 package app.trackching
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -35,6 +37,9 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
 
 private enum class Picking { Start, End }
+
+/** Events repeat by the day, week or month. Never by the year. */
+private val EventUnits = listOf(RepeatUnit.DAY, RepeatUnit.WEEK, RepeatUnit.MONTH)
 
 /** "New event": name, start date, optional end date. */
 @OptIn(ExperimentalTime::class)
@@ -81,14 +86,30 @@ fun EventSheet(
                 )
             }
 
+            Label("Repeat")
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip("Doesn't repeat", selected = form.repeatUnit == null, onClick = { form.repeatUnit = null })
+                EventUnits.forEach { u ->
+                    Chip(u.many.replaceFirstChar { it.uppercase() }, selected = form.repeatUnit == u, onClick = { form.repeatUnit = u })
+                }
+            }
+            form.repeatUnit?.let { unit ->
+                Stepper(
+                    label = "Every",
+                    value = form.repeatEvery,
+                    after = if (form.repeatEvery == 1) unit.one else unit.many,
+                    onStep = form::stepEvery,
+                )
+                Text("Each ${unit.one} gets its own total.", color = c.ink2, fontSize = 13.sp)
+            }
             Text(form.error ?: "", color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 
             OffsetBlock(
                 Modifier.fillMaxWidth().clickable(enabled = form.canSave && !saved, role = Role.Button) {
                     if (saved) return@clickable
                     saved = true
-                    if (editing == null) ledger.addEvent(form.name, form.start, form.end)
-                    else ledger.updateEvent(editing.id, form.name, form.start, form.end)
+                    if (editing == null) ledger.addEvent(form.name, form.start, form.end, form.repeat)
+                    else ledger.updateEvent(editing.id, form.name, form.start, form.end, form.repeat)
                     onSaved()
                     close()
                 },

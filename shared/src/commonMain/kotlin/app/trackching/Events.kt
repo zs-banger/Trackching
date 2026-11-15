@@ -23,6 +23,7 @@ data class EventRow(
     val start: LocalDate,
     val end: LocalDate?,
     val spent: Long,
+    val repeat: EventRepeat? = null,
 )
 
 /**
@@ -31,7 +32,10 @@ data class EventRow(
  */
 fun splitEvents(rows: List<WithTotals>, today: LocalDate): Map<EventStatus, List<EventRow>> {
     val events = rows.map {
-        EventRow(it.id, it.name, LocalDate.parse(it.start_date), it.end_date?.let(LocalDate::parse), it.spent)
+        EventRow(
+            it.id, it.name, LocalDate.parse(it.start_date), it.end_date?.let(LocalDate::parse), it.spent,
+            eventRepeatOf(it.repeat_every, it.repeat_unit),
+        )
     }
     val byStatus = events.groupBy { statusOf(it.start, it.end, today) }
     return mapOf(
