@@ -55,8 +55,10 @@ fun AccountsScreen(
 
     val loadedBalances by remember(ledger) { ledger.balances() }.collectAsState(initial = null)
     val loadedMoves by remember(ledger) { ledger.movements() }.collectAsState(initial = null)
-    val balances = loadedBalances ?: return
+    // Credit accounts aren't money I have: they get their own group, outside the total and the chart (P3-12).
+    val balances = loadedBalances?.filterNot { it.isCredit } ?: return
     val moves = loadedMoves ?: return
+    val credit by remember(ledger) { ledger.creditAccounts() }.collectAsState(initial = emptyList())
     val held by remember(ledger) { ledger.held() }.collectAsState(initial = emptyMap())
     val worth by remember(ledger, today) { ledger.netWorth(today) }.collectAsState(initial = null)
 
@@ -100,6 +102,22 @@ fun AccountsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(Modifier.size(width = 22.dp, height = 12.dp).heldStripes(c.orange, c.track).border(1.dp, c.blue))
                     Text("Held for others", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (credit.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Tag("Credit")
+                credit.forEach { card ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.size(12.dp).background(Color(card.color)))
+                        Text(card.name, Modifier.weight(1f), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "${shown(formatAmount(card.owedNow, AmountKind.Transfer))} owed",
+                            color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold,
+                        )
+                    }
                 }
             }
         }
