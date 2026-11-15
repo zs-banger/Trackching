@@ -39,6 +39,9 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
     val parts = remember { InstallmentCheckIn(ledger.dueInstallments(today)) } // P3-17
     var editingPart by remember { mutableStateOf<Int?>(null) }
     var partError by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    val cards = remember { CardCheckIn(ledger.dueCardPayments(today)) } // P3-15
+    val payFrom = remember { ledger.cardPayFrom() }
+    val payFromName = remember(payFrom) { ledger.accounts().firstOrNull { it.id == payFrom }?.name }
 
     fun save(i: Int) {
         val due = checkIn.rows[i]
@@ -48,6 +51,15 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
     }
 
     /** Pays an IOU part, dated on its due date. A part that can't be paid (money you're holding) says why. */
+    /** Pays a card payment from [payFrom], dated on its due date. */
+    fun saveCard(i: Int) {
+        val from = payFrom ?: return
+        val due = cards.rows[i]
+        val at = atTimeOfDay(LocalDate.parse(due.due_on), Clock.System.now().toEpochMilliseconds())
+        ledger.payCardPayment(due.id, from, at)
+        cards.markSaved(i)
+    }
+
     fun savePart(i: Int) {
         val due = parts.rows[i]
         val at = atTimeOfDay(LocalDate.parse(due.due_on), Clock.System.now().toEpochMilliseconds())
@@ -65,7 +77,7 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
             Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (checkIn.rows.isEmpty() && parts.rows.isEmpty()) {
+            if (checkIn.rows.isEmpty() && parts.rows.isEmpty() && cards.rows.isEmpty()) {
                 Text("Nothing is due right now.", color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
             checkIn.rows.forEachIndexed { i, due ->
@@ -90,6 +102,41 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
                                 checkIn.mark(i, RowState.Skipped)
                             })
                             Chip("Edit", selected = false, onClick = { editingRow = i })
+                        }
+                    }
+                }
+            }
+            if (cards.rows.isNotEmpty()) Tag("Card payments", Modifier.padding(top = 8.dp))
+            cards.rows.forEachIndexed { i, due ->
+                val dueOn = LocalDate.parse(due.due_on)
+                Column(
+                    Modifier.fillMaxWidth().background(c.band).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("${due.name} · ${due.account}", color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Payment ${due.n} of ${due.total_parts} · ${dayLabel(dueOn, today)}" + (payFromName?.let { " · from $it" } ?: ""),
+                                color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        Amount(due.centavos, AmountKind.Expense, maxFontSize = 18.sp)
+                    }
+                    val blocker = cards.blockedBy(i)
+                    when {
+                        cards.stateOf(i) == RowState.Saved ->
+                            Text("Paid on ${monthDay(dueOn)}", color = c.income, fontWeight = FontWeight.Bold)
+                        blocker != null ->
+                            Text("Do ${monthDay(LocalDate.parse(blocker.due_on))} first", color = c.ink2, fontSize = 13.sp)
+                        payFrom == null ->
+                            Text("Add a cash, bank or e-wallet account to pay from", color = c.ink2, fontSize = 13.sp)
+                        else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Chip("Save", selected = true, onClick = { saveCard(i) })
+                                Chip("Not yet", selected = cards.isNotYet(i), onClick = { cards.markNotYet(i) })
+                            }
+                            if (cards.isNotYet(i)) Text("It stays here until you pay it.", color = c.ink2, fontSize = 13.sp)
                         }
                     }
                 }
@@ -145,13 +192,14 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val waiting = checkIn.waiting + parts.waiting
+            val waiting = checkIn.waiting + parts.waiting + (if (payFrom != null) cards.waiting else 0)
             if (waiting > 0) {
                 OffsetBlock(Modifier.weight(1f)) {
                     TextButton(onClick = {
                         // Oldest first, so each repeat's earlier date is always saved before its later one.
                         checkIn.rows.indices.forEach { if (checkIn.canAct(it)) save(it) }
                         parts.rows.indices.forEach { if (parts.canAct(it)) savePart(it) }
+                        cards.rows.indices.forEach { if (cards.canSaveAll(it)) saveCard(it) }
                     }) { Text("SAVE ALL ($waiting)", color = c.ink, fontWeight = FontWeight.ExtraBold) }
                 }
                 TextButton(onClick = close) { Text("Later", fontWeight = FontWeight.Bold) }
