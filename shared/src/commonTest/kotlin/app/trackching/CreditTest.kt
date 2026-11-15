@@ -99,4 +99,22 @@ class CreditTest {
         assertEquals("Payments 4–5 of Earphones paid", planPaidMessage("Earphones", 4, 5))
         assertEquals("Payment 4 of Earphones paid", planPaidMessage("Earphones", 4, 4))
     }
+
+    @Test
+    fun aLoanSummaryAndItsDefaults() {
+        val form = BorrowForm().apply { amount = "5000"; into = 1; plan.count = 1; plan.each = "5250"; plan.firstDue = LocalDate(2026, 3, 1) }
+        val loan = form.loan()!!
+        assertEquals("Cash loan", loan.name)
+        assertEquals(1, loan.payments.size)
+        assertEquals(25_000, loan.payments.single().interest)
+        assertEquals("1 × ₱ 5,250.00 = ₱ 5,250.00 · ₱ 250.00 interest", cardPlanPreview(listOf(525_000), 500_000))
+        assertEquals(listOf(1, 3, 6, 12), LoanCounts)
+    }
+
+    @Test
+    fun aLoanNeedsWhereTheMoneyWent() {
+        val form = BorrowForm().apply { amount = "5000"; plan.each = "2000"; plan.firstDue = LocalDate(2026, 3, 1) }
+        assertNull(form.loan())
+        assertEquals("The amount must be a number, like 5000.00", BorrowForm().apply { amount = "abc" }.error())
+    }
 }

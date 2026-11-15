@@ -61,15 +61,15 @@ class CardPlanForm {
             else amounts.map { parseCentavos(it)?.takeIf { c -> c > 0 } ?: return null }
         }
 
-    /** One message for what you typed. [price] is the cost you typed on the keypad. */
-    fun error(price: Long): String? {
+    /** One message for what you typed. [price] is the cost you typed on the keypad, or what you borrowed. */
+    fun error(price: Long, short: String = "The payments add up to less than the price"): String? {
         val p = payments
         return when {
             sameEach && each.isNotBlank() && parseCentavos(each).let { it == null || it <= 0 } ->
                 "Each payment must be a number, like 1064.00"
             !sameEach && amounts.any { it.isNotBlank() && parseCentavos(it).let { c -> c == null || c <= 0 } } ->
                 "Each payment must be a number, like 1064.00"
-            p != null && price > 0 && p.sum() < price -> "The payments add up to less than the price"
+            p != null && price > 0 && p.sum() < price -> short
             else -> null
         }
     }
@@ -86,6 +86,31 @@ class CardPlanForm {
             dates.indices.map { PlannedPayment(dates[it], p[it], shares[it]) },
         )
     }
+}
+
+/** How many payments a cash loan can have (P3-18). */
+val LoanCounts = listOf(1, 3, 6, 12)
+
+const val LoanShort = "The payments add up to less than you borrowed"
+
+const val LoanNote =
+    "Borrowed money isn't income, and paying it back isn't spending. Only the interest part of each payment counts as spending that month."
+
+/** P3-18 Borrow: the amount, where it went, and the payments. */
+class BorrowForm {
+    var amount by mutableStateOf("")
+    var into by mutableStateOf<Long?>(null)
+    val plan = CardPlanForm().apply { on = true }
+
+    val borrowed: Long get() = parseCentavos(amount)?.takeIf { it > 0 } ?: 0L
+
+    fun error(): String? = when {
+        amount.isNotBlank() && borrowed == 0L -> "The amount must be a number, like 5000.00"
+        else -> plan.error(borrowed, LoanShort)
+    }
+
+    /** The plan to save, or null while something's missing. The name defaults to "Cash loan". */
+    fun loan(): NewCardPlan? = if (borrowed > 0 && into != null && error() == null) plan.plan(borrowed, "Cash loan") else null
 }
 
 /** A plan on the credit row: "Earphones · 3 of 6 payments left", "Next ₱ X on Mar 10 · ₱ Y interest in total". */
