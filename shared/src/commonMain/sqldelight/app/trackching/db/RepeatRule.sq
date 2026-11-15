@@ -54,3 +54,11 @@ UPDATE repeat_rule SET times = MAX(done, 1), until_date = NULL WHERE id = ?;
 
 delete:
 DELETE FROM repeat_rule WHERE id = ?;
+
+-- Words for the check-in rows. category is NULL for a transfer.
+labels:
+SELECT r.id, c.name AS category, a.name AS account, t.name AS to_account
+FROM repeat_rule r
+JOIN account a ON a.id = r.account_id
+LEFT JOIN account t ON t.id = r.to_account_id
+LEFT JOIN category c ON c.id = r.category_id;

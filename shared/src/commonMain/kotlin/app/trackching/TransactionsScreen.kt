@@ -41,7 +41,9 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
                        startTab: TypeTab = TypeTab.All,
                        backTo: String = "Accounts",
                        onOpenReports: (() -> Unit)? = null,
-                       event: Long? = null,) {
+                       event: Long? = null,
+                       waiting: Int = 0,
+                       onCheckIn: () -> Unit = {},) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger) { ledger.history() }.collectAsState(initial = null)
     val allRows = loaded ?: return // still loading: draw nothing for that split second
@@ -71,6 +73,19 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp), // room for the + button
     ) {
+        if (waiting > 0) item {
+            Row(
+                Modifier.fillMaxWidth()
+                    .background(c.orange)
+                    .clickable(onClick = onCheckIn)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val repeats = if (waiting == 1) "1 repeat" else "$waiting repeats"
+                Text("$repeats waiting for your OK", Modifier.weight(1f), color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("›", color = c.ink, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            }
+        }
         if (onBack != null) item { BackLink(backTo, onBack) }
         item {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {

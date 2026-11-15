@@ -175,7 +175,7 @@ fun TxnSheet(
             }
             if (editing == null) {
                 Field("Repeat") { RepeatField(form.repeat, startDay) }
-            } else if (repeatActive && rule != null) {
+            } else if (repeatActive) {
                 Field("Repeat") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
