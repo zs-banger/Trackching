@@ -49,6 +49,7 @@ fun ManageAccountsSheet(ledger: Ledger, onDismiss: () -> Unit) {
     val all by remember(ledger) { ledger.manageList() }.collectAsState(initial = emptyList())
     val active = all.filter { it.archived == 0L }
     val archived = all.filter { it.archived != 0L }
+    var refused by remember { mutableStateOf<String?>(null) }
 
     TrackchingSheet(title = "Manage accounts", onDismiss = onDismiss, swipeToClose = false) { _ ->
         Column(
@@ -60,8 +61,13 @@ fun ManageAccountsSheet(ledger: Ledger, onDismiss: () -> Unit) {
                 accounts = active,
                 canArchive = active.size > 1,
                 onReorder = { ids -> ledger.reorder(ids) },
-                onArchive = { id -> ledger.archive(id) },
+                onArchive = { id ->
+                    // P3-10: an account that holds someone's money stays until it's handed back.
+                    refused = if (ledger.holdsMoney(id)) HandBackFirst else null
+                    if (refused == null) ledger.archive(id)
+                },
             )
+            refused?.let { Text(it, color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
             if (archived.isNotEmpty()) {
                 Text("ARCHIVED", color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 archived.forEach { account ->

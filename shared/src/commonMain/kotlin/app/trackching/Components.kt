@@ -21,6 +21,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -109,6 +110,7 @@ fun OffsetBlock(
 /**
  * A share bar: orange fill over a light track, with a blue edge.
  * `fraction` is 0f to 1f. Put the amount (and anything else) in `content`.
+ * `held` is the striped end of the fill: the part of it that's held for others (P3-10), 0f to 1f of the fill.
  */
 @Composable
 fun Bar(
@@ -116,6 +118,7 @@ fun Bar(
     modifier: Modifier = Modifier,
     label: String? = null,
     height: Dp = 44.dp,
+    held: Float = 0f,
     content: @Composable RowScope.() -> Unit = {},
 ) {
     val c = TrackchingTheme.colors
@@ -143,12 +146,11 @@ fun Bar(
                 .offsetShadow(c.blue, x = 7.dp, y = 6.dp)
                 .background(c.track),
         ) {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                    .background(c.orange),
-            )
+            Row(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f))) {
+                val striped = held.coerceIn(0f, 1f)
+                if (striped < 1f) Box(Modifier.fillMaxHeight().weight(1f - striped).background(c.orange))
+                if (striped > 0f) Box(Modifier.fillMaxHeight().weight(striped).heldStripes(c.orange, c.track))
+            }
             Row(
                 Modifier.fillMaxSize().padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -185,5 +187,16 @@ fun Chip(
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
         )
+    }
+}
+
+/** Diagonal stripes: how money held for others looks on a bar and in its key. */
+fun Modifier.heldStripes(stripe: Color, gap: Color): Modifier = this.clipToBounds().background(gap).drawBehind {
+    val step = 8.dp.toPx()
+    val width = 4.dp.toPx()
+    var x = -size.height
+    while (x < size.width) {
+        drawLine(stripe, Offset(x, size.height), Offset(x + size.height, 0f), strokeWidth = width)
+        x += step
     }
 }

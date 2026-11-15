@@ -1,6 +1,7 @@
 package app.trackching
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,8 @@ fun AccountsScreen(
     val loadedMoves by remember(ledger) { ledger.movements() }.collectAsState(initial = null)
     val balances = loadedBalances ?: return
     val moves = loadedMoves ?: return
+    val held by remember(ledger) { ledger.held() }.collectAsState(initial = emptyMap())
+    val worth by remember(ledger, today) { ledger.netWorth(today) }.collectAsState(initial = null)
 
     var range by rememberSaveable { mutableStateOf(3) }           // 3, 6 or 12 months
     var focus by rememberSaveable { mutableStateOf<Long?>(null) } // an account's id, or null for "Total only"
@@ -80,15 +83,28 @@ fun AccountsScreen(
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("TOTAL BALANCE", color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Amount(total, if (total < 0) AmountKind.Expense else AmountKind.Transfer, maxFontSize = 36.sp)
+            // P3-10: how much of it is really mine. Accounts only, never Home.
+            val hidden = LocalAmountsHidden.current
+            heldLine(total, held.values.sum()) { masked(it, hidden) }?.let {
+                Text(it, color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
         }
 
         // Your accounts: one bar each, sized by its share of the total
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Tag("Your", second = "accounts")
             balances.forEachIndexed { i, account ->
-                AccountShareRow(account, shares[i], total, onClick = { onOpenAccount(account) })
+                AccountShareRow(account, shares[i], total, held[account.id] ?: 0, onClick = { onOpenAccount(account) })
+            }
+            if (held.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.size(width = 22.dp, height = 12.dp).heldStripes(c.orange, c.track).border(1.dp, c.blue))
+                    Text("Held for others", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
+
+        worth?.let { NetWorthCard(it) }
 
         // Balance over time
         val months = remember(today, range) { lastMonths(today, zone, range) }
@@ -139,7 +155,7 @@ fun AccountsScreen(
 
 /** Color, name and type over a bar showing the balance, then its % of the total. */
 @Composable
-private fun AccountShareRow(account: Balances, percent: Int, total: Long, onClick: () -> Unit) {
+private fun AccountShareRow(account: Balances, percent: Int, total: Long, held: Long, onClick: () -> Unit) {
     val c = TrackchingTheme.colors
     val type = AccountType.entries.firstOrNull { it.dbName == account.type }?.label ?: account.type
     val fraction = if (total <= 0L) 0f else account.balance.coerceAtLeast(0L).toFloat() / total
@@ -148,7 +164,13 @@ private fun AccountShareRow(account: Balances, percent: Int, total: Long, onClic
         verticalAlignment = Alignment.Bottom,
     ) {
         Box(Modifier.padding(bottom = 18.dp, end = 6.dp).size(12.dp).background(Color(account.color)))
-        Bar(fraction = fraction, label = "${account.name} · $type", height = 26.dp, modifier = Modifier.weight(1f)) {
+        Bar(
+            fraction = fraction,
+            label = "${account.name} · $type",
+            height = 26.dp,
+            held = heldShare(account.balance, held),
+            modifier = Modifier.weight(1f),
+        ) {
             Text(
                 shown(formatAmount(account.balance, if (account.balance < 0) AmountKind.Expense else AmountKind.Transfer)),
                 color = c.onOrange,
@@ -164,5 +186,38 @@ private fun AccountShareRow(account: Balances, percent: Int, total: Long, onClic
             fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.End,
         )
+    }
+}
+
+/** P3-10: what I'm worth after debts, one line for each part. */
+@Composable
+private fun NetWorthCard(worth: NetWorth) {
+    val c = TrackchingTheme.colors
+    Column(
+        Modifier.fillMaxWidth().background(c.band).border(1.5.dp, c.blue).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("NET WORTH", color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Amount(worth.worth, if (worth.worth < 0) AmountKind.Expense else AmountKind.Transfer, maxFontSize = 30.sp)
+        WorthLine("Total balance", worth.total, AmountKind.Transfer)
+        WorthLine("Owed to me", worth.owedToMe, AmountKind.Income)
+        WorthLine("I owe", worth.iOwe, AmountKind.Expense)
+        WorthLine("Holding for others", worth.holding, AmountKind.Expense)
+        WorthLine("Owed on credit", worth.onCredit, AmountKind.Expense)
+    }
+}
+
+@Composable
+private fun WorthLine(label: String, centavos: Long, kind: AmountKind) {
+    val c = TrackchingTheme.colors
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        // + adds to net worth, − takes away. Nothing to add shows no sign; a negative total shows −.
+        val sign = when {
+            centavos == 0L -> AmountKind.Transfer
+            kind == AmountKind.Transfer && centavos < 0 -> AmountKind.Expense
+            else -> kind
+        }
+        Text(shown(formatAmount(centavos, sign)), color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
