@@ -592,6 +592,13 @@ class Ledger(private val db: TrackchingDatabase) {
     }
 
     /** Whether amounts are hidden (the HIDE ₱ button). Off until you turn it on. */
+    /** Every IOU, worked out for [today]. Re-sent whenever an IOU or a payment changes. */
+    fun ious(today: LocalDate): Flow<List<IouRow>> =
+        db.iouQueries.iouList().asFlow().mapToList(Dispatchers.Default).map { rows -> rows.map { it.toRow(today) } }
+
+    /** How many IOUs are overdue, for the badge on the IOUs tab. */
+    fun overdueCount(today: LocalDate): Flow<Int> = ious(today).map { rows -> rows.count { it.overdue } }
+
     fun amountsHidden(): Boolean =
         db.settingQueries.get("amounts_hidden").executeAsOneOrNull() == "true"
 
