@@ -34,9 +34,15 @@ import kotlinx.datetime.todayIn
 fun EventsScreen(ledger: Ledger, onNewEvent: () -> Unit, onOpenEvent: (Long) -> Unit) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger) { ledger.eventsWithTotals() }.collectAsState(initial = null)
+    val loadedExpenses by remember(ledger) { ledger.eventExpenses() }.collectAsState(initial = null)
     val rows = loaded ?: return // still loading
-    val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
-    val sections = remember(rows, today) { splitEvents(rows, today) }
+    val expenses = loadedExpenses ?: return
+    val zone = remember { TimeZone.currentSystemDefault() }
+    val today = Clock.System.todayIn(zone)
+    val weekStart = remember(ledger) { ledger.weekStart() }
+    val sections = remember(rows, expenses, today) {
+        splitEvents(rows, today).mapValues { (_, events) -> withPeriodTotals(events, expenses, today, weekStart, zone) }
+    }
 
     if (rows.isEmpty()) {
         EmptyScreen("No events yet. Group spending for a trip, a birthday or a big purchase.", "New event", onNewEvent)
@@ -72,7 +78,7 @@ private fun EventLine(event: EventRow, onClick: () -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(event.name, color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(rangeLabel(event.start, event.end), color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(event.repeat?.let(::repeatLabel) ?: rangeLabel(event.start, event.end), color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         Text(
             shown(formatAmount(event.spent, AmountKind.Transfer)),
