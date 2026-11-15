@@ -1,0 +1,19 @@
+-- P3-15: buying in installments on a credit account. A plan, and one row per payment.
+CREATE TABLE credit_plan (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL REFERENCES account(id),
+    name TEXT NOT NULL,
+    principal_centavos INTEGER NOT NULL CHECK (principal_centavos > 0),
+    txn_id INTEGER -- the purchase (P3-15). No REFERENCES: deleting it from the history must still work
+);
+
+CREATE TABLE credit_installment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL REFERENCES credit_plan(id),
+    n INTEGER NOT NULL,
+    due_on TEXT NOT NULL,
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    interest_centavos INTEGER NOT NULL DEFAULT 0 CHECK (interest_centavos >= 0),
+    interest_txn_id INTEGER, -- the Fees & Charges › Interest expense, once paid
+    paid_txn_id INTEGER      -- the transfer that paid it. NULL while it waits
+);

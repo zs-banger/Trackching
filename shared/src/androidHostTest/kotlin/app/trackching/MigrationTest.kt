@@ -176,4 +176,12 @@ class MigrationTest {
         assertNull(account.due_day)
         assertNull(account.minimum_centavos)
     }
+
+    @Test
+    fun oldDatabasesHaveNoCardPlans() {
+        val driver = openCopyOfVersion1()
+        addOneExpense(driver)
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
+        assertEquals(emptyList(), TrackchingDatabase(driver).creditQueries.allCardPayments().executeAsList())
+    }
 }
