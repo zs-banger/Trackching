@@ -57,7 +57,7 @@ import trackching.shared.generated.resources.ic_transactions
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-/** The 5 bottom tabs. IOUs stays disabled until Phase 3. */
+/** The 5 bottom tabs. */
 enum class Tab(
     val label: String,
     val icon: DrawableResource,
@@ -68,7 +68,7 @@ enum class Tab(
     Transactions("Transactions", Res.drawable.ic_transactions, "New transaction"),
     Events("Events", Res.drawable.ic_events, "New event"),
     Categories("Categories", Res.drawable.ic_categories, "New category"),
-    Ious("IOUs", Res.drawable.ic_ious, "New IOU", enabled = false),
+    Ious("IOUs", Res.drawable.ic_ious, "New IOU"),
 }
 
 /** The app: setup on first launch, the tabs after that. */
@@ -146,6 +146,8 @@ private fun MainShell(
     var checkingIn by remember { mutableStateOf(false) }
     val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
     val dueCount by remember(ledger) { ledger.dueCount(today) }.collectAsState(initial = 0)
+    val overdue by remember(ledger) { ledger.overdueCount(today) }.collectAsState(initial = 0)
+    fun newIouComingSoon() { scope.launch { snackbar.showSnackbar("Adding IOUs comes in the next update") } } // P3-8
     // Once per app start: anything due opens the check-in.
     LaunchedEffect(Unit) {
         if (ledger.dueRepeats(today).isNotEmpty()) checkingIn = true
@@ -201,6 +203,7 @@ private fun MainShell(
                             icon = {
                                 BadgedBox(badge = {
                                     if (t == Tab.Transactions && dueCount > 0) Badge { Text("$dueCount") }
+                                    if (t == Tab.Ious && overdue > 0) Badge { Text("$overdue") }
                                 }) {
                                     Icon(painterResource(t.icon), contentDescription = null)
                                 }
@@ -218,7 +221,7 @@ private fun MainShell(
                             Tab.Home, Tab.Transactions -> adding = true
                             Tab.Categories -> addingCategory = true
                             Tab.Events -> addingEvent = true
-                            else -> {}
+                            Tab.Ious -> newIouComingSoon()
                         }
                     },
                     color = c.blue,
@@ -264,9 +267,12 @@ private fun MainShell(
                         Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true },
                             onOpenEvent = { open(Page.EventDetail(it, "Events")) })
                         Tab.Categories -> CategoriesScreen(ledger, onLog = { adding = true })
-                        else -> Text(
-                            "${tab.label} is coming soon",
-                            Modifier.align(Alignment.Center)
+                        Tab.Ious -> IousScreen(
+                            ledger,
+                            today = today,
+                            onOpenPerson = { line, kind -> open(Page.PersonIous(line.personId, line.person, kind)) },
+                            onOpenDueSoon = { open(Page.DueSoon) },
+                            onNew = ::newIouComingSoon,
                         )
                     }
                     Page.Accounts -> AccountsScreen(
@@ -274,6 +280,8 @@ private fun MainShell(
                         onBack = ::back,
                         onOpenAccount = { open(Page.AccountHistory(it.id, it.name)) },
                     )
+                    is Page.PersonIous -> PersonIousScreen(ledger, today, page.personId, page.name, page.kind, onBack = ::back)
+                    Page.DueSoon -> DueSoonScreen(ledger, today, onBack = ::back)
                     Page.Settings -> SettingsScreen(
                         ledger,
                         version = version,
