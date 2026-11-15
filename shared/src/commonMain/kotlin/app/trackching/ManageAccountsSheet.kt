@@ -63,7 +63,8 @@ fun ManageAccountsSheet(ledger: Ledger, onDismiss: () -> Unit) {
                 onReorder = { ids -> ledger.reorder(ids) },
                 onArchive = { id ->
                     // P3-10: an account that holds someone's money stays until it's handed back.
-                    refused = if (ledger.holdsMoney(id)) HandBackFirst else null
+                    // Audit #7: and a card stays until what's owed is paid off.
+                    refused = ledger.archiveRefusal(id)
                     if (refused == null) ledger.archive(id)
                 },
             )

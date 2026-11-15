@@ -60,13 +60,19 @@ fun IouSheet(
     }
     var picking by remember { mutableStateOf<String?>(null) } // "opened" or "due"
     var saved by remember { mutableStateOf(false) }
+    // Audit #5: after a payment, the kind stays and the amount can't go below what's paid.
+    val paid = remember(editing) { editing?.let { ledger.paidOn(it) } ?: 0L }
+    val owedTotal = form.partsTotal
+    val error = form.error ?: if (paid > 0 && owedTotal != null && owedTotal < paid) alreadyPaidMessage(paid) else null
+    val canSave = form.canSave && error == null
 
     TrackchingSheet(title = if (editing == null) "New IOU" else "Edit IOU", onDismiss = onDismiss) { close ->
         Column(
             Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SegmentedTabs(IouKind.entries, form.kind, { form.kind = it }, { it.tabLabel() })
+            SegmentedTabs(IouKind.entries, form.kind, { if (paid == 0L) form.kind = it }, { it.tabLabel() })
+            if (paid > 0) Text(KindLocked, color = c.ink2, fontSize = 13.sp)
 
             OutlinedTextField(
                 value = form.person,
@@ -168,10 +174,10 @@ fun IouSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text(form.error ?: "", color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(error ?: "", color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 
             OffsetBlock(
-                Modifier.fillMaxWidth().clickable(enabled = form.canSave && !saved, role = Role.Button) {
+                Modifier.fillMaxWidth().clickable(enabled = canSave && !saved, role = Role.Button) {
                     val iou = form.toNewIou() ?: return@clickable
                     val account = form.accountId ?: return@clickable
                     if (saved) return@clickable
@@ -181,13 +187,13 @@ fun IouSheet(
                     onSaved()
                     close()
                 },
-                color = if (form.canSave) c.orange else c.line,
-                edge = if (form.canSave) c.blue else c.line,
+                color = if (canSave) c.orange else c.line,
+                edge = if (canSave) c.blue else c.line,
             ) {
                 Text(
                     if (editing == null) "SAVE IOU" else "SAVE CHANGES",
                     Modifier.padding(12.dp),
-                    color = if (form.canSave) c.onOrange else c.ink2,
+                    color = if (canSave) c.onOrange else c.ink2,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                 )
