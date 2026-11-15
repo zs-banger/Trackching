@@ -39,6 +39,7 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
     val parts = remember { InstallmentCheckIn(ledger.dueInstallments(today)) } // P3-17
     var editingPart by remember { mutableStateOf<Int?>(null) }
     var partError by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    var cardError by remember { mutableStateOf<Pair<Int, String>?>(null) } // audit #6: e.g. money you're holding
     val cards = remember { CardCheckIn(ledger.dueCardPayments(today)) } // P3-15
     val payFrom = remember { ledger.cardPayFrom() }
     val payFromName = remember(payFrom) { ledger.accounts().firstOrNull { it.id == payFrom }?.name }
@@ -56,8 +57,13 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
         val from = payFrom ?: return
         val due = cards.rows[i]
         val at = atTimeOfDay(LocalDate.parse(due.due_on), Clock.System.now().toEpochMilliseconds())
-        ledger.payCardPayment(due.id, from, at)
-        cards.markSaved(i)
+        try {
+            ledger.payCardPayment(due.id, from, at)
+            cards.markSaved(i)
+            if (cardError?.first == i) cardError = null
+        } catch (e: IllegalArgumentException) {
+            cardError = i to (e.message ?: "Couldn't pay this one")
+        }
     }
 
     fun savePart(i: Int) {
@@ -137,6 +143,7 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
                                 Chip("Not yet", selected = cards.isNotYet(i), onClick = { cards.markNotYet(i) })
                             }
                             if (cards.isNotYet(i)) Text("It stays here until you pay it.", color = c.ink2, fontSize = 13.sp)
+                            cardError?.takeIf { it.first == i }?.let { Text(it.second, color = c.expense, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
                         }
                     }
                 }

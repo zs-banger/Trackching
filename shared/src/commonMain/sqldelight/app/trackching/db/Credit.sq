@@ -86,3 +86,25 @@ INSERT INTO credit_plan VALUES ?;
 
 backupInsertInstallment:
 INSERT INTO credit_installment VALUES ?;
+
+-- Phase 3 fixes (audit #3, #4): the plan a purchase or loan made, and the plan payment a transaction paid.
+planOfTxn:
+SELECT p.id, p.name, a.name AS account
+FROM credit_plan p JOIN account a ON a.id = p.account_id
+WHERE p.txn_id = ?;
+
+paymentOfTxn:
+SELECT p.name, a.name AS account
+FROM credit_installment ci
+JOIN credit_plan p ON p.id = ci.plan_id
+JOIN account a ON a.id = p.account_id
+WHERE ci.interest_txn_id = :txnId OR ci.paid_txn_id = :txnId;
+
+countPaidOfPlan:
+SELECT COUNT(*) FROM credit_installment WHERE plan_id = ? AND paid_txn_id IS NOT NULL;
+
+deletePaymentsOfPlan:
+DELETE FROM credit_installment WHERE plan_id = ?;
+
+deletePlan:
+DELETE FROM credit_plan WHERE id = ?;

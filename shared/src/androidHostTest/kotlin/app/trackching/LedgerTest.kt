@@ -1629,6 +1629,7 @@ class LedgerTest {
     @Test
     fun payingADuePaymentChargesItsInterestAndTransfersTheWhole() {
         val bpi = card()
+        fund()
         earphones(bpi)
         val before = ledger.balance(cash())
         val due = ledger.dueCardPayments(d(2, 15)).single()
@@ -1675,6 +1676,7 @@ class LedgerTest {
     @Test
     fun backupKeepsCardPlans() {
         val bpi = card()
+        fund()
         earphones(bpi)
         ledger.payCardPayment(ledger.dueCardPayments(d(2, 15)).single().id, cash(), 2_000)
         val file = ledger.backupFile(d(5, 4))
@@ -1765,6 +1767,7 @@ class LedgerTest {
     @Test
     fun payingALoanPaymentOnlyCountsItsInterest() {
         val bpi = card()
+        fund()
         gloan(bpi)
         val due = ledger.dueCardPayments(d(2, 15)).single()
         assertTrue(ledger.payCardPayment(due.id, cash(), 2_000))
@@ -1833,5 +1836,102 @@ class LedgerTest {
         ledger.markBackedUp(d(1, 1))
         assertEquals("Time for a backup", ledger.reminders(d(2, 1)).single().title)
         assertEquals(emptyList(), ledger.reminders(d(2, 2)))
+    }
+
+    // Phase 3 fixes (phase3-audit.md)
+
+    @Test
+    fun deletingACategoryMovesItsRepeatsToo() { // audit #1
+        monthlyRent()
+        val meals = category("Meals")
+        val coffee = category("Coffee")
+        assertEquals(1, ledger.categoryRepeats(meals))
+        ledger.deleteCategory(meals, moveTo = coffee)
+        assertEquals(coffee, db.repeatRuleQueries.allRules().executeAsList().single().category_id)
+    }
+
+    @Test
+    fun aCategoryOnlyARepeatUsesStillNeedsAPlaceToGo() { // audit #1
+        val rentId = monthlyRent()
+        ledger.delete(rentId) // the repeat stays without its first transaction
+        val meals = category("Meals")
+        assertEquals(0, ledger.categoryUsage(meals))
+        assertFailsWith<IllegalArgumentException> { ledger.deleteCategory(meals, moveTo = null) }
+        ledger.deleteCategory(meals, moveTo = category("Coffee"))
+    }
+
+    @Test
+    fun anIousSpendingCantBeDeletedFromTransactions() { // audit #2
+        val meals = category("Meals")
+        ledger.addIou(NewIou(IouKind.OWE, "Juan", 25_000, "Lunch", d(1, 15), paidFor = meals), cash(), 0)
+        val spend = spendingIn(meals).single()
+        assertEquals(linkedToIou("Juan"), ledger.linkedTo(spend.id))
+        val e = assertFailsWith<IllegalArgumentException> { ledger.delete(spend.id) }
+        assertEquals(linkedToIou("Juan"), e.message)
+        assertFailsWith<IllegalArgumentException> { ledger.update(spend.copy(centavos = 1)) }
+    }
+
+    @Test
+    fun undoingAnInstallmentPurchaseTakesThePlan() = runBlocking { // audit #3
+        val bpi = card()
+        val txnId = earphones(bpi)
+        ledger.undo(txnId)
+        assertEquals(emptyList(), ledger.cardPlanLines().first())
+        assertEquals(emptyList(), ledger.dueCardPayments(d(12, 31)))
+        assertEquals(0, owed(bpi))
+    }
+
+    @Test
+    fun aCardPlansTransactionsChangeOnlyWithThePlan() { // audit #4
+        val bpi = card()
+        fund()
+        val purchase = earphones(bpi)
+        assertEquals(linkedToPlan("Earphones", "BPI Card"), ledger.linkedTo(purchase))
+        assertFailsWith<IllegalArgumentException> { ledger.delete(purchase) }
+        ledger.payCardPayment(ledger.dueCardPayments(d(2, 15)).single().id, cash(), 2_000)
+        val paid = db.creditQueries.allCardPayments().executeAsList().first { it.paid_txn_id != null }
+        assertNotNull(ledger.linkedTo(paid.paid_txn_id!!))
+        assertNotNull(ledger.linkedTo(paid.interest_txn_id!!))
+        assertFailsWith<IllegalArgumentException> { ledger.delete(paid.paid_txn_id!!) }
+        assertNull(ledger.linkedTo(fund())) // a plain one is still free
+    }
+
+    @Test
+    fun editIouKeepsTheKindAndAtLeastWhatsPaid() { // audit #5
+        val id = ledger.addIou(NewIou(IouKind.OWE, "Juan", 50_000, "", d(1, 15)), cash(), 0)
+        ledger.recordPayment(id, 20_000, 0, cash(), 1)
+        assertEquals(20_000, ledger.paidOn(id))
+        val kind = assertFailsWith<IllegalArgumentException> {
+            ledger.updateIou(id, NewIou(IouKind.OWED, "Juan", 50_000, "", d(1, 15)), cash(), 0)
+        }
+        assertEquals(KindLocked, kind.message)
+        val low = assertFailsWith<IllegalArgumentException> {
+            ledger.updateIou(id, NewIou(IouKind.OWE, "Juan", 10_000, "", d(1, 15)), cash(), 0)
+        }
+        assertEquals(alreadyPaidMessage(20_000), low.message)
+        ledger.updateIou(id, NewIou(IouKind.OWE, "Juan", 20_000, "Lunch", d(1, 15)), cash(), 0) // down to what's paid is fine
+        assertEquals(0, ledger.iouLeft(id))
+    }
+
+    @Test
+    fun checkInCardPaymentsNeverUseMoneyImHolding() { // audit #6
+        val bpi = card()
+        earphones(bpi)
+        iou(IouKind.HOLDING, "Maria", 200_000) // all of Cash on hand is Maria's
+        val due = ledger.dueCardPayments(d(2, 15)).single()
+        val e = assertFailsWith<IllegalArgumentException> { ledger.payCardPayment(due.id, cash(), 2_000) }
+        assertEquals(ownMoneyMessage("Cash on hand", 0), e.message)
+        assertEquals(1, ledger.dueCardPayments(d(2, 15)).size) // still waiting
+    }
+
+    @Test
+    fun aCardThatsStillOwedCantBeArchived() { // audit #7
+        val bpi = card(owed = 10_000)
+        assertEquals(payOffFirst("BPI Card", 10_000), ledger.archiveRefusal(bpi))
+        assertFailsWith<IllegalArgumentException> { ledger.archive(bpi) }
+        fund()
+        ledger.logTransfer(10_000, cash(), bpi, 2)
+        assertNull(ledger.archiveRefusal(bpi))
+        ledger.archive(bpi)
     }
 }

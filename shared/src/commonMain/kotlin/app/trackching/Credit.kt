@@ -62,3 +62,12 @@ fun billError(centavos: Long, charges: Long, account: String?, own: Long?): Stri
 /** The toast after paying a plan: "Payments 4–5 of Earphones paid", or "Payment 4 of Earphones paid". */
 fun planPaidMessage(name: String, first: Long, last: Long): String =
     if (first == last) "Payment $first of $name paid" else "Payments $first–$last of $name paid"
+
+/** Audit #7: a card with something owed stays until it's paid off, or the debt would disappear from the IOUs tab. */
+fun payOffFirst(name: String, owed: Long): String =
+    "Pay off $name first. It still has ${formatAmount(owed, AmountKind.Transfer)} owed."
+
+/** Audit #2, #4: why Transactions can't change this one on its own. */
+fun linkedToIou(person: String): String = "Part of the IOU with $person. Change it on the IOU."
+
+fun linkedToPlan(plan: String, account: String): String = "Part of $plan on $account. It changes with the plan."
