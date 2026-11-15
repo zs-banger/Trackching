@@ -105,6 +105,9 @@ SELECT name, archived FROM account;
 nameOf:
 SELECT name FROM account WHERE id = ?;
 
+typeOf:
+SELECT type FROM account WHERE id = ?;
+
 eraseAll:
 DELETE FROM account;
 

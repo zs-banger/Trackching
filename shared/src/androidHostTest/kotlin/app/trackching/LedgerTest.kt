@@ -1584,4 +1584,29 @@ class LedgerTest {
         ledger.restore(openBackup(encodeBackup(file)).let { (it as Opened.Ok).file })
         assertEquals(20L, db.accountQueries.creditAccounts().executeAsList().single { it.id == bpi }.due_day)
     }
+
+    // P3-14: add a charge to a credit account
+
+    @Test
+    fun aChargeAddsToWhatsOwedAndToFeesAndCharges() {
+        val bpi = card(owed = 10_000)
+        val id = ledger.addCharge(bpi, ChargeKind.LateFee, 1_500, 100)
+        assertEquals(11_500, owed(bpi))
+        assertEquals(1_500, ledger.totals(0, 1_000).spent)
+        val sub = db.categoryQueries.categoryById(categoryOf(id)!!).executeAsOne()
+        assertEquals("Late fee", sub.name)
+        assertEquals("Fees & Charges", db.categoryQueries.categoryById(sub.parent_id!!).executeAsOne().name)
+    }
+
+    @Test
+    fun chargeInterestSharesTheIouInterestCategory() {
+        val bpi = card()
+        val id = ledger.addCharge(bpi, ChargeKind.Interest, 2_000, 100)
+        assertEquals(ledger.interestCategory("EXPENSE"), categoryOf(id))
+    }
+
+    @Test
+    fun chargesOnlyGoOnCredit() {
+        assertFailsWith<IllegalArgumentException> { ledger.addCharge(cash(), ChargeKind.AnnualFee, 1_000, 1) }
+    }
 }
