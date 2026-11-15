@@ -51,6 +51,7 @@ fun IouScreen(
     val loadedPayments by remember(ledger, iouId) { ledger.payments(iouId) }.collectAsState(initial = null)
     val iou = loadedIou ?: return // loading, or gone
     val payments = loadedPayments ?: return
+    val parts by remember(ledger, iouId) { ledger.installments(iouId) }.collectAsState(initial = emptyList())
     val kind = IouKind.valueOf(iou.kind)
     val terms = remember(iou) { iou.terms() }
     val left = remember(iou, payments) { iou.leftAfter(payments) }
@@ -96,6 +97,8 @@ fun IouScreen(
                 if (kind != IouKind.HOLDING) Fact("Interest", interestLabel(terms.interest))
                 Fact("Started", dateLabel(terms.openedOn))
                 if (kind != IouKind.HOLDING) Fact("Due", terms.dueOn?.let { dateLabel(it) } ?: "No due date")
+                // P3-17: "3 of 6 payments left · next due Mar 10"
+                if (!settled) installmentsLine(parts)?.let { Fact("Installments", it) }
                 if (iou.note.isNotBlank()) Fact("Note", iou.note)
 
                 if (!settled) {

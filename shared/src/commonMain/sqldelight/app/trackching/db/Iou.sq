@@ -35,6 +35,20 @@ CREATE TABLE iou_payment (
     interest_centavos INTEGER NOT NULL DEFAULT 0 CHECK (interest_centavos >= 0)
 );
 
+-- An IOU paid back in parts (P3-17). Each part is saved up front, so "They differ" amounts are kept as typed.
+-- centavos is the whole part, interest included; interest_centavos is its share of the interest.
+-- state: WAITING until the check-in saves or skips it. payment_id: the payment it was saved as.
+CREATE TABLE iou_installment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    iou_id INTEGER NOT NULL REFERENCES iou(id),
+    n INTEGER NOT NULL,
+    due_on TEXT NOT NULL,
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    interest_centavos INTEGER NOT NULL DEFAULT 0 CHECK (interest_centavos >= 0),
+    state TEXT NOT NULL DEFAULT 'WAITING' CHECK (state IN ('WAITING', 'SAVED', 'SKIPPED')),
+    payment_id INTEGER REFERENCES iou_payment(id)
+);
+
 -- Does nothing if the name is already there ("juan" counts as "Juan").
 addPerson:
 INSERT OR IGNORE INTO person(name) VALUES (?);
@@ -72,6 +86,7 @@ paymentsOf:
 SELECT * FROM iou_payment WHERE iou_id = ? ORDER BY id;
 
 eraseAll {
+    DELETE FROM iou_installment;
     DELETE FROM iou_payment;
     DELETE FROM iou;
     DELETE FROM person;
@@ -155,3 +170,55 @@ SELECT t.occurred_at, t.account_id, i.kind,
 FROM iou_payment ip
 JOIN txn t ON t.id = ip.txn_id
 JOIN iou i ON i.id = ip.iou_id;
+
+-- Installments (P3-17).
+
+installmentsOf:
+SELECT * FROM iou_installment WHERE iou_id = ? ORDER BY n;
+
+-- Parts that are due and not handled yet, oldest first, with who and which way.
+dueInstallments:
+SELECT ins.*, i.kind, p.name AS person,
+       (SELECT COUNT(*) FROM iou_installment a WHERE a.iou_id = ins.iou_id) AS total_parts
+FROM iou_installment ins
+JOIN iou i ON i.id = ins.iou_id
+JOIN person p ON p.id = i.person_id
+WHERE ins.state = 'WAITING' AND ins.due_on <= :today
+ORDER BY ins.due_on, ins.iou_id, ins.n;
+
+allWaitingInstallments:
+SELECT * FROM iou_installment WHERE state = 'WAITING';
+
+insertInstallment:
+INSERT INTO iou_installment(iou_id, n, due_on, centavos, interest_centavos) VALUES (?, ?, ?, ?, ?);
+
+-- Only while nothing is handled: Edit IOU replaces the whole plan.
+deleteInstallmentsOf:
+DELETE FROM iou_installment WHERE iou_id = ?;
+
+countHandled:
+SELECT COUNT(*) FROM iou_installment WHERE iou_id = ? AND state <> 'WAITING';
+
+-- Saved or skipped. Only from WAITING, so a double tap does nothing the second time.
+markInstallment:
+UPDATE iou_installment SET state = :state, payment_id = :paymentId WHERE id = :id AND state = 'WAITING';
+
+installmentById:
+SELECT * FROM iou_installment WHERE id = ?;
+
+-- Deleting a payment the check-in saved: that part is waiting again.
+unmarkByPayment:
+UPDATE iou_installment SET state = 'WAITING', payment_id = NULL WHERE payment_id = ?;
+
+installmentOfPayment:
+SELECT id FROM iou_installment WHERE payment_id = ?;
+
+setInstallmentPayment:
+UPDATE iou_installment SET state = 'SAVED', payment_id = ? WHERE id = ?;
+
+backupInstallments:
+SELECT * FROM iou_installment ORDER BY id;
+
+backupInsertInstallment:
+INSERT INTO iou_installment VALUES ?;
+
