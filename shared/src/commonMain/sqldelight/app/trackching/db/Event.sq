@@ -4,11 +4,13 @@ CREATE TABLE event (
     name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     start_date TEXT NOT NULL,
     end_date TEXT, -- NULL = ongoing, no end yet
+    repeat_every INTEGER CHECK (repeat_every IS NULL OR repeat_every >= 1), -- NULL = doesn't repeat
+    repeat_unit TEXT CHECK (repeat_unit IS NULL OR repeat_unit IN ('DAY', 'WEEK', 'MONTH')),
     CHECK (end_date IS NULL OR end_date >= start_date)
 );
 
 insert:
-INSERT INTO event(name, start_date, end_date) VALUES (?, ?, ?);
+INSERT INTO event(name, start_date, end_date, repeat_every, repeat_unit) VALUES (?, ?, ?, ?, ?);
 
 lastId:
 SELECT last_insert_rowid();
@@ -18,7 +20,7 @@ SELECT * FROM event WHERE id = ?;
 
 -- Every event with what was spent on it. LEFT JOIN so events with nothing tagged show 0.
 withTotals:
-SELECT e.id, e.name, e.start_date, e.end_date,
+SELECT e.id, e.name, e.start_date, e.end_date, e.repeat_every, e.repeat_unit,
        CAST(COALESCE(SUM(CASE WHEN t.kind = 'EXPENSE' THEN t.centavos END), 0) AS INTEGER) AS spent
 FROM event e
 LEFT JOIN txn t ON t.event_id = e.id
@@ -33,14 +35,13 @@ ORDER BY start_date DESC, id DESC
 LIMIT 1;
 
 update:
-UPDATE event SET name = ?, start_date = ?, end_date = ? WHERE id = ?;
+UPDATE event SET name = ?, start_date = ?, end_date = ?, repeat_every = ?, repeat_unit = ? WHERE id = ?;
 
 delete:
 DELETE FROM event WHERE id = ?;
 
--- Puts a deleted event back with its old id, for Undo.
 restore:
-INSERT INTO event(id, name, start_date, end_date) VALUES (?, ?, ?, ?);
+INSERT INTO event(id, name, start_date, end_date, repeat_every, repeat_unit) VALUES (?, ?, ?, ?, ?, ?);
 
 eraseAll:
 DELETE FROM event;
@@ -50,3 +51,8 @@ SELECT COUNT(*) FROM event;
 
 backupAll:
 SELECT * FROM event ORDER BY id;
+
+-- Every expense tagged to an event, with its moment, so a repeating event can add up one period.
+expensesByEvent:
+SELECT event_id, occurred_at, centavos FROM txn
+WHERE event_id IS NOT NULL AND kind = 'EXPENSE';

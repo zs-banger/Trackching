@@ -99,6 +99,20 @@ WHERE t.event_id = ? AND t.kind = 'EXPENSE'
 GROUP BY COALESCE(p.id, c.id)
 ORDER BY total DESC;
 
+-- The same, for one period of a repeating event (P3-4).
+eventSpendingBetween:
+SELECT COALESCE(p.id, c.id) AS id,
+       COALESCE(p.name, c.name) AS name,
+       COALESCE(p.color, c.color) AS color,
+       CAST(COALESCE(SUM(t.centavos), 0) AS INTEGER) AS total
+FROM txn t
+JOIN category c ON c.id = t.category_id
+LEFT JOIN category p ON p.id = c.parent_id
+WHERE t.event_id = :eventId AND t.kind = 'EXPENSE'
+  AND t.occurred_at >= :from AND t.occurred_at < :until
+GROUP BY COALESCE(p.id, c.id)
+ORDER BY total DESC;
+
 eraseAll:
 DELETE FROM txn;
 
