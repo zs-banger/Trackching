@@ -42,6 +42,9 @@ import kotlinx.datetime.atStartOfDayIn
 data class RunUndo(val run: Event_run, val untagged: List<Long>, val deleted: Boolean)
 
 /** What Undo needs after a payment is deleted (P3-7): the payment and the money that moved. */
+/** An IOU as the Edit IOU sheet loads it: the row, the person's name, its money and its spending (P3-8). */
+data class IouToEdit(val iou: Iou, val person: String, val money: Txn?, val spend: Txn?)
+
 data class DeletedPayment(val payment: Iou_payment, val txn: Txn)
 
 data class DeletedEvent(val event: Event, val txnIds: List<Long>, val runs: List<Event_run> = emptyList())
@@ -563,23 +566,80 @@ class Ledger(private val db: TrackchingDatabase) {
     /**
      * Saves an IOU and moves the money in or out of [accountId] as one 'IOU' transaction,
      * so the balance changes but it's never income or spending. Returns the IOU's id.
+     * With [NewIou.paidFor] it's also spending in that category, and the account ends up unchanged (P3-8).
      */
     fun addIou(iou: NewIou, accountId: Long, occurredAt: Long): Long = db.transactionWithResult {
+        val personId = checkIou(iou)
+        val txnId = insertIouMoney(iou, accountId, occurredAt)
+        val spendId = iou.paidFor?.let { insertSpend(iou.centavos, accountId, it, occurredAt) }
+        db.iouQueries.insert(
+            iou.kind.name, personId, iou.centavos, iou.whatFor.trim(), iou.openedOn.toString(), iou.dueOn?.toString(),
+            iou.interest.kindName(), iou.interest.value(), iou.note.trim(), txnId, spendId,
+        )
+        db.iouQueries.lastId().executeAsOne()
+    }
+
+    /** The rules for adding or editing an IOU. Saves the person's name and returns their id. */
+    private fun checkIou(iou: NewIou): Long {
         val name = iou.person.trim()
         require(name.isNotEmpty()) { "An IOU needs a person" }
         require(iou.centavos > 0) { "An IOU needs an amount" }
         require(iou.kind != IouKind.HOLDING || iou.interest == Interest.None) { "Money you're holding has no interest" }
+        require(iou.paidFor == null || iou.kind == IouKind.OWE) { "Only an IOU you owe can pay for something" }
         interestOf(IouTerms(iou.centavos, iou.interest, iou.openedOn, iou.dueOn)) // fails early on a bad interest
-
         db.iouQueries.addPerson(name)
-        val personId = db.iouQueries.personId(name).executeAsOne()
+        return db.iouQueries.personId(name).executeAsOne()
+    }
+
+    /** The money that moved when the IOU started, signed for the account (see IouKind). */
+    private fun insertIouMoney(iou: NewIou, accountId: Long, occurredAt: Long): Long {
         db.txnQueries.insert(IOU, iou.kind.sign * iou.centavos, accountId, null, null, occurredAt)
-        val txnId = db.txnQueries.lastId().executeAsOne()
-        db.iouQueries.insert(
+        return db.txnQueries.lastId().executeAsOne()
+    }
+
+    /**
+     * "It paid for something": the spending, in the same account as the IOU's money.
+     * The IOU's +amount and this -amount cancel out, so the account doesn't change.
+     */
+    private fun insertSpend(centavos: Long, accountId: Long, categoryId: Long, occurredAt: Long): Long {
+        db.txnQueries.insert("EXPENSE", centavos, accountId, null, categoryId, occurredAt)
+        return db.txnQueries.lastId().executeAsOne()
+    }
+
+    /** Everything the Edit IOU sheet needs, or null if it's gone (P3-8). */
+    fun iouToEdit(id: Long): IouToEdit? {
+        val iou = db.iouQueries.byId(id).executeAsOneOrNull() ?: return null
+        val person = db.iouQueries.iouDetail(id).executeAsOne().person
+        val money = iou.txn_id?.let { db.txnQueries.byId(it).executeAsOneOrNull() }
+        val spend = iou.spend_txn_id?.let { db.txnQueries.byId(it).executeAsOneOrNull() }
+        return IouToEdit(iou, person, money, spend)
+    }
+
+    /**
+     * Edit IOU (P3-8): same rules as adding one. Its money and its spending change with it.
+     * Turning "It paid for something" off deletes the spending; turning it on adds it.
+     */
+    fun updateIou(id: Long, iou: NewIou, accountId: Long, occurredAt: Long) = db.transaction {
+        val old = db.iouQueries.byId(id).executeAsOne()
+        val personId = checkIou(iou)
+        val txnId = old.txn_id?.also {
+            db.txnQueries.update(IOU, iou.kind.sign * iou.centavos, accountId, null, null, occurredAt, it)
+        } ?: insertIouMoney(iou, accountId, occurredAt)
+        val category = iou.paidFor
+        val oldSpend = old.spend_txn_id
+        val spendId = when {
+            category == null -> null
+            oldSpend != null -> oldSpend.also {
+                db.txnQueries.update("EXPENSE", iou.centavos, accountId, null, category, occurredAt, it)
+            }
+            else -> insertSpend(iou.centavos, accountId, category, occurredAt)
+        }
+        db.iouQueries.update(
             iou.kind.name, personId, iou.centavos, iou.whatFor.trim(), iou.openedOn.toString(), iou.dueOn?.toString(),
-            iou.interest.kindName(), iou.interest.value(), iou.note.trim(), txnId,
+            iou.interest.kindName(), iou.interest.value(), iou.note.trim(), txnId, spendId, id,
         )
-        db.iouQueries.lastId().executeAsOne()
+        // After the IOU stops pointing at it.
+        if (category == null && oldSpend != null) db.txnQueries.delete(oldSpend)
     }
 
     /** Remembered names that start with what's typed, for the suggestions under the field. */
@@ -697,7 +757,7 @@ class Ledger(private val db: TrackchingDatabase) {
         ious = db.iouQueries.backupIous().executeAsList().map {
             IouBackup(
                 it.id, it.kind, it.person_id, it.centavos, it.what_for, it.opened_on, it.due_on,
-                it.interest_kind, it.interest_value, it.note, it.txn_id,
+                it.interest_kind, it.interest_value, it.note, it.txn_id, it.spend_txn_id,
             )
         },
         iouPayments = db.iouQueries.backupPayments().executeAsList().map {
@@ -733,7 +793,7 @@ class Ledger(private val db: TrackchingDatabase) {
             file.ious.forEach {
                 db.iouQueries.backupInsertIou(Iou(
                     it.id, it.kind, it.personId, it.centavos, it.whatFor, it.openedOn, it.dueOn,
-                    it.interestKind, it.interestValue, it.note, it.txnId,
+                    it.interestKind, it.interestValue, it.note, it.txnId, it.spendTxnId,
                 ))
             }
             file.iouPayments.forEach {

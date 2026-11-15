@@ -90,6 +90,13 @@ fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {
                 label = { it },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
+            // P3-8: money people lend, borrow or leave with you isn't spending or income.
+            Text(
+                "Borrowing, lending and holding money aren't categories. They live in IOUs.",
+                Modifier.padding(horizontal = 16.dp),
+                color = c.ink2,
+                fontSize = 13.sp,
+            )
         }
         if (nothingLogged(groups)) {
             item {

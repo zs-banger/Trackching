@@ -36,7 +36,7 @@ fun IousScreen(
     today: LocalDate,
     onOpenPerson: (PersonLine, IouKind) -> Unit,
     onOpenDueSoon: () -> Unit,
-    onNew: () -> Unit,
+    onNew: (IouKind) -> Unit,
     onOpenIou: (Long) -> Unit = {},
 ) {
     val c = TrackchingTheme.colors
@@ -63,7 +63,7 @@ fun IousScreen(
         }
         if (view.people.isEmpty()) {
             item(key = "empty") {
-                EmptyState(emptyMessage(kind), newLabel(kind), onNew, Modifier.padding(horizontal = 16.dp))
+                EmptyState(emptyMessage(kind), newLabel(kind), { onNew(kind) }, Modifier.padding(horizontal = 16.dp))
             }
         }
         items(view.people, key = { "person-${it.personId}" }) { line ->

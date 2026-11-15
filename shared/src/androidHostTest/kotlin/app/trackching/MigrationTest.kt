@@ -122,4 +122,25 @@ class MigrationTest {
         assertEquals(false, eventRowOf(db.eventQueries.byId(1).executeAsOne()).occasional)
         assertEquals(emptyList(), db.eventQueries.runsOf(1).executeAsList())
     }
+
+    @Test
+    fun oldIousDidntPayForAnything() {
+        val driver = openCopyOfVersion1()
+        addOneExpense(driver)
+        // An IOU saved by the app before P3-8 (schema 6), with its money as an 'IOU' transaction.
+        TrackchingDatabase.Schema.migrate(driver, 1, 6)
+        driver.execute(null, "INSERT INTO txn(kind, centavos, account_id, occurred_at) VALUES ('IOU', 50000, 1, 0)", 0)
+        driver.execute(null, "INSERT INTO person(name) VALUES ('Juan')", 0)
+        driver.execute(
+            null,
+            "INSERT INTO iou(kind, person_id, centavos, opened_on, txn_id) VALUES ('OWE', 1, 50000, '2026-01-15', 2)",
+            0,
+        )
+
+        TrackchingDatabase.Schema.migrate(driver, 6, TrackchingDatabase.Schema.version)
+
+        val edit = Ledger(TrackchingDatabase(driver)).iouToEdit(1)
+        assertNull(edit?.spend)
+        assertEquals(1L, edit?.money?.account_id)
+    }
 }

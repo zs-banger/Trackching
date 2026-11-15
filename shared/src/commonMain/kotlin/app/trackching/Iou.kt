@@ -76,4 +76,6 @@ data class NewIou(
     val dueOn: LocalDate? = null,
     val interest: Interest = Interest.None,
     val note: String = "",
+    /** "It paid for something" (P3-8): the expense category, instead of money moving. Only for OWE. */
+    val paidFor: Long? = null,
 )
