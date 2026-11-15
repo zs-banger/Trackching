@@ -713,20 +713,50 @@ class Ledger(private val db: TrackchingDatabase) {
      * The money moves in [accountId] as an 'IOU' transaction, the other way from when the IOU started.
      * Returns the payment's id.
      */
-    fun recordPayment(iouId: Long, centavos: Long, interest: Long, accountId: Long, occurredAt: Long): Long =
+    fun recordPayment(
+        iouId: Long,
+        centavos: Long,
+        interest: Long,
+        accountId: Long,
+        occurredAt: Long,
+        extraAsInterest: Long = 0,
+    ): Long =
         db.transactionWithResult {
             val context = paymentContext(iouId)
             require(centavos > 0) { "A payment needs an amount" }
             require(centavos <= context.left) { "That's more than what's left" }
             require(interest in 0..minOf(centavos, context.interestDue)) { "That interest part doesn't fit" }
             if (context.kind == IouKind.OWE) {
-                ownMoney()[accountId]?.let { own -> require(centavos <= own) { "That would use money you're holding" } }
+                ownMoney()[accountId]?.let { own -> require(centavos + extraAsInterest <= own) { "That would use money you're holding" } }
             }
             db.txnQueries.insert(IOU, -context.kind.sign * centavos, accountId, null, null, occurredAt)
             val txnId = db.txnQueries.lastId().executeAsOne()
             db.iouQueries.insertPayment(iouId, txnId, centavos - interest, interest)
-            db.iouQueries.lastId().executeAsOne()
+            val paymentId = db.iouQueries.lastId().executeAsOne()
+            // P3-16: paid more than what was left. The extra is interest: income when they paid me, a charge when I paid.
+            if (extraAsInterest > 0) {
+                require(context.kind != IouKind.HOLDING) { "Money you're holding has no interest" }
+                if (context.kind == IouKind.OWED) {
+                    insert("INCOME", extraAsInterest, accountId, null, interestCategory("INCOME"), occurredAt, null)
+                } else {
+                    insert("EXPENSE", extraAsInterest, accountId, null, interestCategory("EXPENSE"), occurredAt, null)
+                }
+            }
+            paymentId
         }
+
+    /**
+     * Where extra paid on an IOU goes (P3-16): Income › Interest › From IOUs, or Fees & Charges › Interest.
+     * Made if it's not there (setup lets you untick it). Returns the subcategory's id.
+     */
+    fun interestCategory(kind: String): Long {
+        val (mainName, subName, color) =
+            if (kind == "INCOME") Triple("Interest", "From IOUs", 0xFF6B93D6) else Triple("Fees & Charges", "Interest", 0xFF8A6D5C)
+        val main = db.categoryQueries.findCategory(kind, null, mainName).executeAsOneOrNull()
+            ?: addCategory(mainName, kind, null, color, CategoryIcons.first())
+        return db.categoryQueries.findCategory(kind, main, subName).executeAsOneOrNull()
+            ?: addCategory(subName, kind, main, color, CategoryIcons.first())
+    }
 
     /** Every payment's money, for the Flow summary. Re-sent when a payment changes. */
     fun paymentMoves(): Flow<List<PaymentMoves>> = db.iouQueries.paymentMoves().asFlow().mapToList(Dispatchers.Default)
