@@ -1,0 +1,11 @@
+-- P3-17: an IOU paid back in parts. A new table, so old IOUs simply have none.
+CREATE TABLE iou_installment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    iou_id INTEGER NOT NULL REFERENCES iou(id),
+    n INTEGER NOT NULL,
+    due_on TEXT NOT NULL,
+    centavos INTEGER NOT NULL CHECK (centavos > 0),
+    interest_centavos INTEGER NOT NULL DEFAULT 0 CHECK (interest_centavos >= 0),
+    state TEXT NOT NULL DEFAULT 'WAITING' CHECK (state IN ('WAITING', 'SAVED', 'SKIPPED')),
+    payment_id INTEGER REFERENCES iou_payment(id)
+);
