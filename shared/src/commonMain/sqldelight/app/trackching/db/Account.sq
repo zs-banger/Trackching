@@ -29,7 +29,7 @@ SELECT CAST(a.starting_centavos + COALESCE(SUM(
         WHEN t.kind = 'EXPENSE'  AND t.account_id    = a.id THEN -t.centavos
         WHEN t.kind = 'TRANSFER' AND t.account_id    = a.id THEN -t.centavos
         WHEN t.kind = 'TRANSFER' AND t.to_account_id = a.id THEN  t.centavos
-        WHEN t.kind = 'ADJUSTMENT' AND t.account_id = a.id THEN  t.centavos
+        WHEN t.kind IN ('ADJUSTMENT', 'IOU') AND t.account_id = a.id THEN  t.centavos
         ELSE 0
     END
 ), 0) AS INTEGER) AS balance
@@ -53,7 +53,7 @@ SELECT a.id, a.name, a.color, CAST(a.starting_centavos + COALESCE(SUM(
         WHEN t.kind = 'EXPENSE'  AND t.account_id    = a.id THEN -t.centavos
         WHEN t.kind = 'TRANSFER' AND t.account_id    = a.id THEN -t.centavos
         WHEN t.kind = 'TRANSFER' AND t.to_account_id = a.id THEN  t.centavos
-        WHEN t.kind = 'ADJUSTMENT' AND t.account_id = a.id THEN  t.centavos
+        WHEN t.kind IN ('ADJUSTMENT', 'IOU') AND t.account_id = a.id THEN  t.centavos
         ELSE 0
     END
 ), 0) AS INTEGER) AS balance, a.type
