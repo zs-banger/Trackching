@@ -73,7 +73,12 @@ enum class Tab(
 
 /** The app: setup on first launch, the tabs after that. */
 @Composable
-fun AppShell(database: TrackchingDatabase, version: String = "") {
+fun AppShell(
+    database: TrackchingDatabase,
+    version: String = "",
+    opening: ReminderTarget? = null,   // a tapped reminder (P3-11)
+    onOpened: () -> Unit = {},
+) {
     val ledger = remember(database) { Ledger(database) }
     var setupDone by remember(ledger) { mutableStateOf(ledger.setupDone()) }
     var theme by remember(ledger) { mutableStateOf(ledger.theme()) }
@@ -95,6 +100,8 @@ fun AppShell(database: TrackchingDatabase, version: String = "") {
                         generation++
                     },
                     justRestored = justRestored,
+                    opening = opening,
+                    onOpened = onOpened,
                 )
             }
         } else {
@@ -121,6 +128,8 @@ private fun MainShell(
     onErased: () -> Unit,
     onRestored: () -> Unit,
     justRestored: Boolean,
+    opening: ReminderTarget?,
+    onOpened: () -> Unit,
 ) {
     val c = TrackchingTheme.colors
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
@@ -155,6 +164,16 @@ private fun MainShell(
         if (ledger.dueRepeats(today).isNotEmpty() || ledger.dueInstallments(today).isNotEmpty() || ledger.dueCardPayments(today).isNotEmpty()) {
             checkingIn = true
         }
+    }
+
+    // P3-11: a tapped reminder opens the IOUs tab, the check-in, or Settings.
+    LaunchedEffect(opening) {
+        when (opening ?: return@LaunchedEffect) {
+            ReminderTarget.Ious -> { pages = emptyList(); tab = Tab.Ious }
+            ReminderTarget.CheckIn -> checkingIn = true
+            ReminderTarget.Settings -> pages = listOf(Page.Settings)
+        }
+        onOpened()
     }
 
     // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.

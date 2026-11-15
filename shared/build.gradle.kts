@@ -35,6 +35,9 @@ kotlin {
             implementation(libs.compose.uiTooling)
             implementation(libs.sqldelight.android.driver)
             implementation(libs.androidx.activity.compose)
+            // P3-11 reminders: the once-a-day check, and notifications
+            implementation(libs.androidx.work.runtime)
+            implementation(libs.androidx.core.ktx)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
