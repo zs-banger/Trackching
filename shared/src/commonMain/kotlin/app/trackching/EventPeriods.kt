@@ -79,7 +79,8 @@ fun pastPeriods(periods: EventPeriods, index: Int, count: Int = 6): List<Pair<In
     (maxOf(0, index - count + 1)..index).map { it to periods.period(it) }
 
 /**
- * The events list, with each repeating event's spending for its current period only.
+ * The events list, with each repeating event's spending for its current period only,
+ * and each occasional event's for the run it's showing (its dates are already that run's, see showingRun).
  * One-off events keep their all-time total.
  */
 fun withPeriodTotals(
@@ -89,6 +90,13 @@ fun withPeriodTotals(
     weekStart: DayOfWeek,
     zone: TimeZone,
 ): List<EventRow> = events.map { event ->
+    if (event.occasional) {
+        val bucket = eventBucket(event, today, zone)
+        return@map event.copy(
+            spent = expenses.filter { it.event_id == event.id && it.occurred_at >= bucket.from && it.occurred_at < bucket.until }
+                .sumOf { it.centavos },
+        )
+    }
     val repeat = event.repeat ?: return@map event
     val periods = EventPeriods(event.start, repeat, weekStart)
     val index = currentIndex(periods, event.end, today) ?: return@map event.copy(spent = 0)

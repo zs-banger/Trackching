@@ -6,11 +6,22 @@ CREATE TABLE event (
     end_date TEXT, -- NULL = ongoing, no end yet
     repeat_every INTEGER, -- NULL = doesn't repeat. Rules are in EventRepeat (see 4.sqm)
     repeat_unit TEXT,     -- 'DAY', 'WEEK' or 'MONTH'
+    occasional INTEGER NOT NULL DEFAULT 0, -- 1 = happens now and then; its dates are in event_run
     CHECK (end_date IS NULL OR end_date >= start_date)
 );
 
+-- One run of an occasional event: "Out-of-town trips" has a run per trip. Runs of one event never overlap.
+-- The event's own start_date / end_date are kept as its first run's start and last run's end.
+CREATE TABLE event_run (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES event(id),
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    CHECK (end_date >= start_date)
+);
+
 insert:
-INSERT INTO event(name, start_date, end_date, repeat_every, repeat_unit) VALUES (?, ?, ?, ?, ?);
+INSERT INTO event(name, start_date, end_date, repeat_every, repeat_unit, occasional) VALUES (?, ?, ?, ?, ?, ?);
 
 lastId:
 SELECT last_insert_rowid();
@@ -20,18 +31,22 @@ SELECT * FROM event WHERE id = ?;
 
 -- Every event with what was spent on it. LEFT JOIN so events with nothing tagged show 0.
 withTotals:
-SELECT e.id, e.name, e.start_date, e.end_date, e.repeat_every, e.repeat_unit,
+SELECT e.id, e.name, e.start_date, e.end_date, e.repeat_every, e.repeat_unit, e.occasional,
        CAST(COALESCE(SUM(CASE WHEN t.kind = 'EXPENSE' THEN t.centavos END), 0) AS INTEGER) AS spent
 FROM event e
 LEFT JOIN txn t ON t.event_id = e.id
 GROUP BY e.id;
 
 -- The event covering one day ('YYYY-MM-DD'). Start and end days count; no end = ongoing.
+-- An occasional event covers only the days of its runs, not the gaps between them.
 -- If several overlap, the most recently started wins.
 activeOn:
-SELECT id, name FROM event
-WHERE start_date <= :day AND (end_date IS NULL OR end_date >= :day)
-ORDER BY start_date DESC, id DESC
+SELECT e.id, e.name FROM event e
+WHERE (e.occasional = 0 AND e.start_date <= :day AND (e.end_date IS NULL OR e.end_date >= :day))
+   OR (e.occasional = 1 AND EXISTS (
+        SELECT 1 FROM event_run r WHERE r.event_id = e.id AND r.start_date <= :day AND r.end_date >= :day
+      ))
+ORDER BY e.start_date DESC, e.id DESC
 LIMIT 1;
 
 update:
@@ -42,7 +57,7 @@ DELETE FROM event WHERE id = ?;
 
 -- Puts a deleted event back with its old id, for Undo.
 restore:
-INSERT INTO event(id, name, start_date, end_date, repeat_every, repeat_unit) VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO event(id, name, start_date, end_date, repeat_every, repeat_unit, occasional) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 eraseAll:
 DELETE FROM event;
@@ -57,3 +72,31 @@ SELECT * FROM event ORDER BY id;
 expensesByEvent:
 SELECT event_id, occurred_at, centavos FROM txn
 WHERE event_id IS NOT NULL AND kind = 'EXPENSE';
+
+-- Runs of occasional events (P3-19).
+
+runsOf:
+SELECT * FROM event_run WHERE event_id = ? ORDER BY start_date;
+
+allRuns:
+SELECT * FROM event_run ORDER BY event_id, start_date;
+
+insertRun:
+INSERT INTO event_run(event_id, start_date, end_date) VALUES (?, ?, ?);
+
+-- Puts a run back with its old id, for Undo and restore.
+restoreRun:
+INSERT INTO event_run(id, event_id, start_date, end_date) VALUES (?, ?, ?, ?);
+
+deleteRunsOf:
+DELETE FROM event_run WHERE event_id = ?;
+
+eraseRuns:
+DELETE FROM event_run;
+
+-- Keeps an occasional event's own dates = first run's start to last run's end.
+fitToRuns:
+UPDATE event
+SET start_date = (SELECT MIN(start_date) FROM event_run WHERE event_id = :id),
+    end_date = (SELECT MAX(end_date) FROM event_run WHERE event_id = :id)
+WHERE id = :id;

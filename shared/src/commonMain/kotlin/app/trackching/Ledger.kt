@@ -8,6 +8,7 @@ import app.trackching.db.MostUsed
 import app.trackching.db.Totals
 import app.trackching.db.TrackchingDatabase
 import app.trackching.db.Iou
+import app.trackching.db.Event_run
 import app.trackching.db.EventSpendingBetween
 import app.trackching.db.ExpensesByEvent
 import app.trackching.db.Iou_payment
@@ -34,7 +35,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 
 /** A deleted event and the transactions it had, so Undo can put both back. */
-data class DeletedEvent(val event: Event, val txnIds: List<Long>)
+data class DeletedEvent(val event: Event, val txnIds: List<Long>, val runs: List<Event_run> = emptyList())
 
 /** One date a repeat is waiting on. [n] is which time it is (0 = the start date). */
 data class DueRepeat(val n: Int, val date: LocalDate, val rule: Repeat_rule)
@@ -291,15 +292,47 @@ class Ledger(private val db: TrackchingDatabase) {
         }
     }
 
-    /** Saves an event. No end date means it's ongoing. [repeat]: a new period every N days, weeks or months. Returns its id. */
-    fun addEvent(name: String, start: LocalDate, end: LocalDate?, repeat: EventRepeat? = null): Long {
+    /**
+     * Saves an event. No end date means it's ongoing. [repeat]: a new period every N days, weeks or months.
+     * [occasional]: start and end become its first run (P3-19); it needs an end date and never repeats. Returns its id.
+     */
+    fun addEvent(
+        name: String,
+        start: LocalDate,
+        end: LocalDate?,
+        repeat: EventRepeat? = null,
+        occasional: Boolean = false,
+    ): Long {
         val clean = name.trim()
         require(clean.isNotEmpty()) { "An event needs a name" }
         require(end == null || end >= start) { "The end date can't be before the start date" }
+        require(!occasional || (end != null && repeat == null)) { "An occasional event needs an end date and doesn't repeat" }
         return db.transactionWithResult {
-            db.eventQueries.insert(clean, start.toString(), end?.toString(), repeat?.every?.toLong(), repeat?.unit?.name)
-            db.eventQueries.lastId().executeAsOne()
+            db.eventQueries.insert(
+                clean, start.toString(), end?.toString(), repeat?.every?.toLong(), repeat?.unit?.name, if (occasional) 1L else 0L,
+            )
+            val id = db.eventQueries.lastId().executeAsOne()
+            if (occasional) db.eventQueries.insertRun(id, start.toString(), requireNotNull(end).toString())
+            id
         }
+    }
+
+    /** An occasional event's runs, oldest first. Re-sent when one changes. */
+    fun runs(eventId: Long): Flow<List<EventRun>> =
+        db.eventQueries.runsOf(eventId).asFlow().mapToList(Dispatchers.Default).map { rows -> rows.map { it.toRun() } }
+
+    /** Every run of every event, by event, for the Events list. */
+    fun allRuns(): Flow<Map<Long, List<EventRun>>> =
+        db.eventQueries.allRuns().asFlow().mapToList(Dispatchers.Default).map { rows -> rows.map { it.toRun() }.groupBy { it.eventId } }
+
+    /** "+ Set new dates": adds a run. Fails if the dates overlap another run of the same event. Returns its id. */
+    fun addRun(eventId: Long, first: LocalDate, last: LocalDate): Long = db.transactionWithResult {
+        val runs = db.eventQueries.runsOf(eventId).executeAsList().map { it.toRun() }
+        runError(runs, first, last)?.let { throw IllegalArgumentException(it) }
+        db.eventQueries.insertRun(eventId, first.toString(), last.toString())
+        val id = db.eventQueries.lastId().executeAsOne()
+        db.eventQueries.fitToRuns(eventId)
+        id
     }
 
     /** Every event with its spending. Re-sent when an event or a transaction changes. */
@@ -347,15 +380,18 @@ class Ledger(private val db: TrackchingDatabase) {
     fun deleteEvent(id: Long): DeletedEvent? = db.transactionWithResult {
         val event = db.eventQueries.byId(id).executeAsOneOrNull() ?: return@transactionWithResult null
         val ids = db.txnQueries.idsForEvent(id).executeAsList()
+        val runs = db.eventQueries.runsOf(id).executeAsList()
         db.txnQueries.untagEvent(id)
+        db.eventQueries.deleteRunsOf(id) // first: a run points at its event
         db.eventQueries.delete(id)
-        DeletedEvent(event, ids)
+        DeletedEvent(event, ids, runs)
     }
 
     /** Undo for deleteEvent: the event comes back with its old id, and its transactions are tagged again. */
     fun restoreEvent(deleted: DeletedEvent) = db.transaction {
         val e = deleted.event
-        db.eventQueries.restore(e.id, e.name, e.start_date, e.end_date, e.repeat_every, e.repeat_unit)
+        db.eventQueries.restore(e.id, e.name, e.start_date, e.end_date, e.repeat_every, e.repeat_unit, e.occasional)
+        deleted.runs.forEach { db.eventQueries.restoreRun(it.id, it.event_id, it.start_date, it.end_date) }
         deleted.txnIds.forEach { db.txnQueries.setEvent(e.id, it) }
     }
 
@@ -538,6 +574,7 @@ class Ledger(private val db: TrackchingDatabase) {
             db.iouQueries.eraseAll() // first: an IOU points at its transaction
             db.txnQueries.eraseAll()
             db.repeatRuleQueries.eraseAll()
+            db.eventQueries.eraseRuns()
             db.eventQueries.eraseAll()
             db.categoryQueries.eraseAll()
             db.accountQueries.eraseAll()
@@ -555,8 +592,9 @@ class Ledger(private val db: TrackchingDatabase) {
             CategoryBackup(it.id, it.name, it.kind, it.parent_id, it.color, it.sort_order, it.icon)
         },
         events = db.eventQueries.backupAll().executeAsList().map {
-            EventBackup(it.id, it.name, it.start_date, it.end_date, it.repeat_every, it.repeat_unit)
+            EventBackup(it.id, it.name, it.start_date, it.end_date, it.repeat_every, it.repeat_unit, it.occasional)
         },
+        eventRuns = db.eventQueries.allRuns().executeAsList().map { RunBackup(it.id, it.event_id, it.start_date, it.end_date) },
         txns = db.txnQueries.backupAll().executeAsList().map {
             TxnBackup(it.id, it.kind, it.centavos, it.account_id, it.to_account_id, it.category_id, it.occurred_at, it.event_id, it.repeat_id)
         },
@@ -589,7 +627,10 @@ class Ledger(private val db: TrackchingDatabase) {
             file.categories.forEach {
                 db.categoryQueries.backupInsert(it.id, it.name, it.kind, it.parentId, it.color, it.sortOrder, it.icon)
             }
-            file.events.forEach { db.eventQueries.restore(it.id, it.name, it.startDate, it.endDate, it.repeatEvery, it.repeatUnit) }
+            file.events.forEach {
+                db.eventQueries.restore(it.id, it.name, it.startDate, it.endDate, it.repeatEvery, it.repeatUnit, it.occasional)
+            }
+            file.eventRuns.forEach { db.eventQueries.restoreRun(it.id, it.eventId, it.startDate, it.endDate) }
             file.repeats.forEach {
                 db.repeatRuleQueries.backupInsert(
                     it.id, it.every, it.unit, it.startDate, it.times, it.untilDate, it.done,

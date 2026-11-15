@@ -141,6 +141,7 @@ private fun MainShell(
     var addingEvent by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Txn?>(null) }
     var editingEvent by remember { mutableStateOf<EventRow?>(null) }
+    var newDatesFor by remember { mutableStateOf<Long?>(null) } // an occasional event's id (P3-19)
     var managingAccounts by remember { mutableStateOf(false) }
     var checkingIn by remember { mutableStateOf(false) }
     val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
@@ -322,6 +323,7 @@ private fun MainShell(
                         onEdit = { editingEvent = it },
                         onOpenTransactions = { bucket, tab -> open(Page.EventHistory(page.id, bucket, tab)) },
                         onLog = { adding = true },
+                        onNewDates = { newDatesFor = page.id },
                     )
                     is Page.EventHistory -> TransactionsScreen(
                         ledger,
@@ -353,6 +355,14 @@ private fun MainShell(
                     ledger,
                     onDismiss = { addingEvent = false },
                     onSaved = { scope.launch { snackbar.showSnackbar("Event saved") } },
+                )
+            }
+            newDatesFor?.let { id ->
+                EventRunSheet(
+                    ledger,
+                    eventId = id,
+                    onDismiss = { newDatesFor = null },
+                    onSaved = { scope.launch { snackbar.showSnackbar("Dates saved") } },
                 )
             }
             if (managingAccounts) {

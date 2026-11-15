@@ -13,6 +13,7 @@ fun eventRowOf(event: Event): EventRow =
     EventRow(
         event.id, event.name, LocalDate.parse(event.start_date), event.end_date?.let(LocalDate::parse), spent = 0,
         repeat = eventRepeatOf(event.repeat_every, event.repeat_unit),
+        occasional = event.occasional == 1L,
     )
 
 /**
@@ -38,4 +39,5 @@ fun EventForm.loadFrom(event: EventRow) {
     end = event.end
     repeatUnit = event.repeat?.unit
     repeatEvery = event.repeat?.every ?: 1
+    occasional = event.occasional
 }

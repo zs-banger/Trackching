@@ -24,18 +24,24 @@ data class EventRow(
     val end: LocalDate?,
     val spent: Long,
     val repeat: EventRepeat? = null,
+    val occasional: Boolean = false,
 )
 
 /**
- * Splits events into Active, Upcoming and Past.
+ * Splits events into Active, Upcoming and Past. An occasional event goes by the run it's showing (P3-19).
  * Active: newest start first. Upcoming: soonest first. Past: most recently ended first.
  */
-fun splitEvents(rows: List<WithTotals>, today: LocalDate): Map<EventStatus, List<EventRow>> {
+fun splitEvents(
+    rows: List<WithTotals>,
+    today: LocalDate,
+    runs: Map<Long, List<EventRun>> = emptyMap(),
+): Map<EventStatus, List<EventRow>> {
     val events = rows.map {
         EventRow(
             it.id, it.name, LocalDate.parse(it.start_date), it.end_date?.let(LocalDate::parse), it.spent,
             eventRepeatOf(it.repeat_every, it.repeat_unit),
-        )
+            occasional = it.occasional == 1L,
+        ).showingRun(runs[it.id].orEmpty(), today)
     }
     val byStatus = events.groupBy { statusOf(it.start, it.end, today) }
     return mapOf(

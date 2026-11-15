@@ -19,13 +19,20 @@ class EventForm(today: LocalDate) {
         repeatEvery = (repeatEvery + by).coerceIn(1, 99)
     }
 
+    /** Happens now and then, with its own runs of dates (P3-19). It never repeats. */
+    var occasional by mutableStateOf(false)
+
     /** What to save: null when it doesn't repeat. */
-    val repeat: EventRepeat? get() = repeatUnit?.let { EventRepeat(repeatEvery, it) }
+    val repeat: EventRepeat? get() = if (occasional) null else repeatUnit?.let { EventRepeat(repeatEvery, it) }
 
     val error: String?
         get() {
             val e = end
-            return if (e != null && e < start) "The end date can't be before the start date" else null
+            return when {
+                e != null && e < start -> "The end date can't be before the start date"
+                occasional && e == null -> "An occasional event needs an end date"
+                else -> null
+            }
         }
 
     val canSave: Boolean get() = name.isNotBlank() && error == null

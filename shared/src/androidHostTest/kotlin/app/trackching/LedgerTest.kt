@@ -484,7 +484,7 @@ class LedgerTest {
     @Test
     fun databaseAlsoRejectsEndBeforeStart() {
         // Skips Ledger on purpose: the table's CHECK alone blocks it.
-        assertFails { db.eventQueries.insert("Oops", "2026-12-23", "2026-12-20", null, null) }
+        assertFails { db.eventQueries.insert("Oops", "2026-12-23", "2026-12-20", null, null, 0) }
     }
 
     @Test
@@ -754,7 +754,7 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 5", "\"format\": 1")
+            .replace("\"format\": 6", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
@@ -995,5 +995,94 @@ class LedgerTest {
         ledger.eraseAll()
         ledger.restore(openBackup(encodeBackup(before)).let { (it as Opened.Ok).file })
         assertEquals(weekly, eventRowOf(db.eventQueries.byId(id).executeAsOne()).repeat)
+    }
+
+    // P3-19: occasional events
+
+    private fun trips() = ledger.addEvent("Out-of-town trips", d(3, 10), d(3, 14), occasional = true)
+    private fun runsOf(id: Long) = db.eventQueries.runsOf(id).executeAsList().map { it.toRun() }
+
+    @Test
+    fun anOccasionalEventStartsWithItsFirstRun() {
+        val id = trips()
+        assertEquals(listOf(d(3, 10) to d(3, 14)), runsOf(id).map { it.first to it.last })
+    }
+
+    @Test
+    fun anOccasionalEventNeedsAnEndDate() {
+        assertFailsWith<IllegalArgumentException> { ledger.addEvent("Trips", d(3, 10), null, occasional = true) }
+    }
+
+    @Test
+    fun overlappingDatesAreRefused() {
+        val id = trips()
+        assertFailsWith<IllegalArgumentException> { ledger.addRun(id, d(3, 14), d(3, 16)) }
+        assertEquals(1, runsOf(id).size)
+    }
+
+    @Test
+    fun anotherEventMayUseTheSameDates() {
+        trips()
+        val other = ledger.addEvent("Work trips", d(1, 1), d(1, 2), occasional = true)
+        ledger.addRun(other, d(3, 10), d(3, 14))
+        assertEquals(2, runsOf(other).size)
+    }
+
+    @Test
+    fun theEventsOwnDatesFollowItsRuns() {
+        val id = trips()
+        ledger.addRun(id, d(6, 1), d(6, 5))
+        val event = eventRowOf(db.eventQueries.byId(id).executeAsOne())
+        assertEquals(d(3, 10), event.start)
+        assertEquals(d(6, 5), event.end)
+    }
+
+    @Test
+    fun newTransactionsAreTaggedOnlyDuringARun() {
+        val id = trips()
+        ledger.addRun(id, d(6, 1), d(6, 5))
+        assertEquals(id, ledger.activeEventOn(d(3, 12))?.id)
+        assertNull(ledger.activeEventOn(d(4, 20)))   // between the two trips
+        assertEquals(id, ledger.activeEventOn(d(6, 1))?.id)
+    }
+
+    @Test
+    fun deletingAndUndoingKeepsTheRuns() {
+        val id = trips()
+        ledger.addRun(id, d(6, 1), d(6, 5))
+        ledger.restoreEvent(ledger.deleteEvent(id)!!)
+        assertEquals(2, runsOf(id).size)
+    }
+
+    @Test
+    fun runsAreBackedUp() {
+        val id = trips()
+        ledger.addRun(id, d(6, 1), d(6, 5))
+        val before = ledger.backupFile(d(11, 15))
+        ledger.eraseAll()
+        ledger.restore(openBackup(encodeBackup(before)).let { (it as Opened.Ok).file })
+        assertEquals(2, runsOf(id).size)
+        assertTrue(eventRowOf(db.eventQueries.byId(id).executeAsOne()).occasional)
+    }
+
+    @Test
+    fun theListShowsTheShownRunsTotalOnly() {
+        val zone = TimeZone.UTC
+        val id = trips()
+        ledger.addRun(id, d(6, 1), d(6, 5))
+        fun spend(day: LocalDate, centavos: Long) {
+            val txn = ledger.logExpense(centavos, category("Meals"), cash(), day.atStartOfDayIn(zone).toEpochMilliseconds())
+            ledger.tagEvent(txn, id)
+        }
+        spend(d(3, 11), 100_000)  // March trip
+        spend(d(6, 2), 40_000)    // June trip
+
+        val today = d(6, 3)
+        val runs = db.eventQueries.allRuns().executeAsList().map { it.toRun() }.groupBy { it.eventId }
+        val active = withPeriodTotals(
+            splitEvents(db.eventQueries.withTotals().executeAsList(), today, runs).getValue(EventStatus.Active),
+            db.eventQueries.expensesByEvent().executeAsList(), today, DayOfWeek.MONDAY, zone,
+        )
+        assertEquals(40_000, active.single().spent)
     }
 }

@@ -45,6 +45,7 @@ fun EventScreen(
     onEdit: (EventRow) -> Unit,
     onOpenTransactions: (Bucket, TypeTab) -> Unit,
     onLog: () -> Unit,
+    onNewDates: () -> Unit = {},
 ) {
     val c = TrackchingTheme.colors
     val zone = remember { TimeZone.currentSystemDefault() }
@@ -57,6 +58,10 @@ fun EventScreen(
     val rows = loadedRows ?: return
     val ids = loadedIds ?: return
     val eventRows = remember(rows, ids) { rowsOfEvent(rows, ids.toSet()) }
+    val loadedRuns by remember(ledger, eventId) { ledger.runs(eventId) }.collectAsState(initial = null)
+    val runs = loadedRuns ?: return
+    // An occasional event shows one run: the active one, else the last finished, else the first upcoming (P3-19).
+    val run = remember(runs, today) { if (event.occasional) runToShow(runs, today) else null }
 
     // A repeating event shows one period at a time; a one-off event shows all its dates.
     val weekStart = remember(ledger) { ledger.weekStart() }
@@ -64,16 +69,21 @@ fun EventScreen(
     val current = remember(periods, today) { periods?.let { currentIndex(it, event.end, today) } }
     var picked by rememberSaveable(eventId) { mutableStateOf<Int?>(null) }
     val index = picked ?: current
-    val bucket = remember(event, periods, index, today) {
-        if (periods != null && index != null) periodBucket(periods.period(index), today, zone) else eventBucket(event, today, zone)
+    val bucket = remember(event, periods, index, run, today) {
+        when {
+            run != null -> eventBucket(event.copy(start = run.first, end = run.last), today, zone)
+            periods != null && index != null -> periodBucket(periods.period(index), today, zone)
+            else -> eventBucket(event, today, zone)
+        }
     }
 
+    val byDates = periods != null || run != null // only part of the event's spending
     val loadedSpending by remember(ledger, eventId, bucket) {
-        if (periods == null) ledger.eventSpending(eventId).map { list -> list.map { Share(it.name, it.total, it.color) } }
+        if (!byDates) ledger.eventSpending(eventId).map { list -> list.map { Share(it.name, it.total, it.color) } }
         else ledger.eventSpendingBetween(eventId, bucket.from, bucket.until).map { list -> list.map { Share(it.name, it.total, it.color) } }
     }.collectAsState(initial = null)
     val shares = loadedSpending ?: return
-    val periodRows = remember(eventRows, bucket, periods) { if (periods == null) eventRows else rowsIn(bucket, eventRows) }
+    val periodRows = remember(eventRows, bucket, byDates) { if (byDates) rowsIn(bucket, eventRows) else eventRows }
     val flow = remember(periodRows) { flowOf(periodRows) }
 
     Column(
@@ -89,9 +99,17 @@ fun EventScreen(
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Tag(event.name)
             Text(
-                event.repeat?.let { "${repeatLabel(it)} · ${rangeLabel(event.start, event.end)}" } ?: rangeLabel(event.start, event.end),
+                when {
+                    run != null -> "Occasional · ${periodLabel(EventPeriod(run.first, run.last))}"
+                    else -> event.repeat?.let { "${repeatLabel(it)} · ${rangeLabel(event.start, event.end)}" } ?: rangeLabel(event.start, event.end)
+                },
                 color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold,
             )
+            if (event.occasional) {
+                TextButton(onClick = onNewDates) {
+                    Text("+ SET NEW DATES", color = c.orangeInk, fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
         if (periods != null && index == null) {
@@ -133,7 +151,15 @@ fun EventScreen(
         }
 
         if (shares.none { it.centavos > 0 }) {
-            EmptyState(if (periods == null) "Nothing spent on this event yet" else "Nothing spent in this period", "Log a transaction", onLog)
+            EmptyState(
+                when {
+                    run != null -> "Nothing spent on these dates"
+                    periods != null -> "Nothing spent in this period"
+                    else -> "Nothing spent on this event yet"
+                },
+                "Log a transaction",
+                onLog,
+            )
         } else {
             ChartCard("Spending", "by category") {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
