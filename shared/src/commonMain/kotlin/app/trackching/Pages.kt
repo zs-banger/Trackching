@@ -33,6 +33,9 @@ sealed interface Page {
     /** Every IOU with a due date, soonest first, opened from the IOUs tab. */
     data object DueSoon : Page
 
+    /** One IOU and its payments (P3-7). `from` is where Back returns to, for its label. */
+    data class IouDetail(val id: Long, val from: String) : Page
+
     /** Settings, opened from the gear on Home. */
     data object Settings : Page
 }
