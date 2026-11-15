@@ -273,6 +273,7 @@ private fun MainShell(
                             onOpenPerson = { line, kind -> open(Page.PersonIous(line.personId, line.person, kind)) },
                             onOpenDueSoon = { open(Page.DueSoon) },
                             onNew = ::newIouComingSoon,
+                            onOpenIou = { open(Page.IouDetail(it, "IOUs")) },
                         )
                     }
                     Page.Accounts -> AccountsScreen(
@@ -280,8 +281,21 @@ private fun MainShell(
                         onBack = ::back,
                         onOpenAccount = { open(Page.AccountHistory(it.id, it.name)) },
                     )
-                    is Page.PersonIous -> PersonIousScreen(ledger, today, page.personId, page.name, page.kind, onBack = ::back)
-                    Page.DueSoon -> DueSoonScreen(ledger, today, onBack = ::back)
+                    is Page.PersonIous -> PersonIousScreen(
+                        ledger, today, page.personId, page.name, page.kind, onBack = ::back,
+                        onOpenIou = { open(Page.IouDetail(it, page.name)) },
+                    )
+                    Page.DueSoon -> DueSoonScreen(ledger, today, onBack = ::back, onOpenIou = { open(Page.IouDetail(it, "Due soon")) })
+                    is Page.IouDetail -> IouScreen(
+                        ledger,
+                        iouId = page.id,
+                        today = today,
+                        backTo = page.from,
+                        onBack = ::back,
+                        onRecord = { scope.launch { snackbar.showSnackbar("Recording payments comes in a later update") } }, // P3-9
+                        onEdit = { scope.launch { snackbar.showSnackbar("Editing IOUs comes in the next update") } },        // P3-8
+                        onDeletedPayment = { deleted -> showUndo("Payment deleted") { ledger.restorePayment(deleted) } },
+                    )
                     Page.Settings -> SettingsScreen(
                         ledger,
                         version = version,

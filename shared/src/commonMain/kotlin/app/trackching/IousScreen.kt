@@ -37,6 +37,7 @@ fun IousScreen(
     onOpenPerson: (PersonLine, IouKind) -> Unit,
     onOpenDueSoon: () -> Unit,
     onNew: () -> Unit,
+    onOpenIou: (Long) -> Unit = {},
 ) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger, today) { ledger.ious(today) }.collectAsState(initial = null)
@@ -79,7 +80,7 @@ fun IousScreen(
                 }
             }
             if (showSettled) {
-                items(view.settled, key = { "iou-${it.id}" }) { IouLine(it, showPerson = true) }
+                items(view.settled, key = { "iou-${it.id}" }) { IouLine(it, showPerson = true, onClick = { onOpenIou(it.id) }) }
             }
         }
     }
@@ -157,7 +158,15 @@ private fun OverdueLabel() {
 
 /** One person's IOUs of one kind, opened from the IOUs tab. */
 @Composable
-fun PersonIousScreen(ledger: Ledger, today: LocalDate, personId: Long, name: String, kind: IouKind, onBack: () -> Unit) {
+fun PersonIousScreen(
+    ledger: Ledger,
+    today: LocalDate,
+    personId: Long,
+    name: String,
+    kind: IouKind,
+    onBack: () -> Unit,
+    onOpenIou: (Long) -> Unit = {},
+) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger, today) { ledger.ious(today) }.collectAsState(initial = null)
     val rows = loaded ?: return
@@ -172,13 +181,13 @@ fun PersonIousScreen(ledger: Ledger, today: LocalDate, personId: Long, name: Str
                 Text(kind.tabLabel(), Modifier.padding(start = 8.dp, bottom = 12.dp), color = c.ink2, fontWeight = FontWeight.Bold)
             }
         }
-        items(mine, key = { it.id }) { IouLine(it, showPerson = false) } // tapping opens the IOU in P3-7
+        items(mine, key = { it.id }) { IouLine(it, showPerson = false, onClick = { onOpenIou(it.id) }) }
     }
 }
 
 /** Everything with a due date, soonest first. Holding isn't here: it has no due date. */
 @Composable
-fun DueSoonScreen(ledger: Ledger, today: LocalDate, onBack: () -> Unit) {
+fun DueSoonScreen(ledger: Ledger, today: LocalDate, onBack: () -> Unit, onOpenIou: (Long) -> Unit = {}) {
     val c = TrackchingTheme.colors
     val loaded by remember(ledger, today) { ledger.ious(today) }.collectAsState(initial = null)
     val rows = loaded ?: return
@@ -201,6 +210,6 @@ fun DueSoonScreen(ledger: Ledger, today: LocalDate, onBack: () -> Unit) {
                 }
             }
         }
-        items(due, key = { it.id }) { IouLine(it, showPerson = true) }
+        items(due, key = { it.id }) { IouLine(it, showPerson = true, onClick = { onOpenIou(it.id) }) }
     }
 }
