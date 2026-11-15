@@ -12,6 +12,7 @@ import kotlin.test.assertFails
 import java.util.Properties
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -483,7 +484,7 @@ class LedgerTest {
     @Test
     fun databaseAlsoRejectsEndBeforeStart() {
         // Skips Ledger on purpose: the table's CHECK alone blocks it.
-        assertFails { db.eventQueries.insert("Oops", "2026-12-23", "2026-12-20") }
+        assertFails { db.eventQueries.insert("Oops", "2026-12-23", "2026-12-20", null, null) }
     }
 
     @Test
@@ -753,7 +754,7 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 4", "\"format\": 1")
+            .replace("\"format\": 5", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
@@ -941,5 +942,58 @@ class LedgerTest {
         val line = ledger.csv(TimeZone.UTC).trim().lines()[1]
         assertTrue(line.startsWith("1970-01-01,IOU,500.00,"))
         assertTrue(line.endsWith(",Juan"))
+    }
+
+    // P3-4: repeating events
+
+    private val weekly = EventRepeat(1, RepeatUnit.WEEK)
+
+    @Test
+    fun aRepeatingEventKeepsItsRepeat() {
+        val id = ledger.addEvent("Groceries", d(11, 9), null, weekly)
+        assertEquals(weekly, eventRowOf(db.eventQueries.byId(id).executeAsOne()).repeat)
+    }
+
+    @Test
+    fun editingCanTurnTheRepeatOff() {
+        val id = ledger.addEvent("Groceries", d(11, 9), null, weekly)
+        ledger.updateEvent(id, "Groceries", d(11, 9), null, repeat = null)
+        assertNull(eventRowOf(db.eventQueries.byId(id).executeAsOne()).repeat)
+    }
+
+    @Test
+    fun undoingADeleteKeepsTheRepeat() {
+        val id = ledger.addEvent("Groceries", d(11, 9), null, weekly)
+        ledger.restoreEvent(ledger.deleteEvent(id)!!)
+        assertEquals(weekly, eventRowOf(db.eventQueries.byId(id).executeAsOne()).repeat)
+    }
+
+    @Test
+    fun theListShowsThisWeeksTotalOnly() {
+        val zone = TimeZone.UTC
+        val id = ledger.addEvent("Groceries", d(11, 2), null, weekly)
+        fun spend(day: LocalDate, centavos: Long) {
+            val txn = ledger.logExpense(centavos, category("Meals"), cash(), day.atStartOfDayIn(zone).toEpochMilliseconds())
+            ledger.tagEvent(txn, id)
+        }
+        spend(d(11, 5), 100_000)  // last week
+        spend(d(11, 10), 30_000)  // this week
+        spend(d(11, 12), 20_000)  // this week
+
+        val events = splitEvents(db.eventQueries.withTotals().executeAsList(), d(11, 13))
+        val active = withPeriodTotals(
+            events.getValue(EventStatus.Active), db.eventQueries.expensesByEvent().executeAsList(),
+            today = d(11, 13), weekStart = DayOfWeek.MONDAY, zone = zone,
+        )
+        assertEquals(50_000, active.single().spent)
+    }
+
+    @Test
+    fun repeatingEventsAreBackedUp() {
+        val id = ledger.addEvent("Groceries", d(11, 9), null, weekly)
+        val before = ledger.backupFile(d(11, 15))
+        ledger.eraseAll()
+        ledger.restore(openBackup(encodeBackup(before)).let { (it as Opened.Ok).file })
+        assertEquals(weekly, eventRowOf(db.eventQueries.byId(id).executeAsOne()).repeat)
     }
 }

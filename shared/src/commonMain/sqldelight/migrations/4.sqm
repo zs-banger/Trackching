@@ -1,0 +1,6 @@
+-- Version 4 → 5 (P3-4): an event can repeat every N days, weeks or months.
+-- Both NULL = it doesn't repeat, so every event from before stays as it was.
+-- No CHECKs here: SQLDelight can't read a CHECK on a column added by ALTER TABLE.
+-- The rules (every >= 1; DAY, WEEK or MONTH; both or neither) live in EventRepeat and eventRepeatOf.
+ALTER TABLE event ADD COLUMN repeat_every INTEGER;
+ALTER TABLE event ADD COLUMN repeat_unit TEXT;

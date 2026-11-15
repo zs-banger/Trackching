@@ -77,9 +77,9 @@ fun RepeatField(form: RepeatForm, start: LocalDate) {
     }
 }
 
-/** "Every [−] 2 [+] weeks". */
+/** "Every [−] 2 [+] weeks". Also used by the event sheet (P3-4). */
 @Composable
-private fun Stepper(label: String, value: Int, after: String, onStep: (Int) -> Unit) {
+internal fun Stepper(label: String, value: Int, after: String, onStep: (Int) -> Unit) {
     val c = TrackchingTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, color = c.ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
