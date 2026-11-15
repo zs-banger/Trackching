@@ -41,3 +41,9 @@ fun creditDueLine(dueDay: Long?, today: LocalDate): String {
     }
     return "Due ${monthDay(due)} · $whenText"
 }
+
+/** What a statement charge is (P3-14). Each is saved under Fees & Charges in its own subcategory. */
+enum class ChargeKind(val label: String) { Interest("Interest"), LateFee("Late fee"), AnnualFee("Annual fee") }
+
+/** The Add charge sheet's note. */
+fun chargeNote(card: String): String = "Saved as an expense under Fees & Charges, and added to what you owe on $card."

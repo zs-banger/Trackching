@@ -860,13 +860,27 @@ class Ledger(private val db: TrackchingDatabase) {
      * Where extra paid on an IOU goes (P3-16): Income › Interest › From IOUs, or Fees & Charges › Interest.
      * Made if it's not there (setup lets you untick it). Returns the subcategory's id.
      */
-    fun interestCategory(kind: String): Long {
-        val (mainName, subName, color) =
-            if (kind == "INCOME") Triple("Interest", "From IOUs", 0xFF6B93D6) else Triple("Fees & Charges", "Interest", 0xFF8A6D5C)
+    fun interestCategory(kind: String): Long =
+        if (kind == "INCOME") subcategory("INCOME", "Interest", "From IOUs", 0xFF6B93D6)
+        else chargeCategory(ChargeKind.Interest)
+
+    /** Fees & Charges › Interest, Late fee or Annual fee (P3-14). Made if it's not there. */
+    fun chargeCategory(charge: ChargeKind): Long = subcategory("EXPENSE", "Fees & Charges", charge.label, 0xFF8A6D5C)
+
+    private fun subcategory(kind: String, mainName: String, subName: String, color: Long): Long {
         val main = db.categoryQueries.findCategory(kind, null, mainName).executeAsOneOrNull()
             ?: addCategory(mainName, kind, null, color, CategoryIcons.first())
         return db.categoryQueries.findCategory(kind, main, subName).executeAsOneOrNull()
             ?: addCategory(subName, kind, main, color, CategoryIcons.first())
+    }
+
+    /**
+     * Add charge (P3-14): interest or a fee from the statement. It's spending under Fees & Charges,
+     * in the credit account, so it adds to what's owed. Returns the transaction's id.
+     */
+    fun addCharge(accountId: Long, charge: ChargeKind, centavos: Long, occurredAt: Long): Long = db.transactionWithResult {
+        require(db.accountQueries.typeOf(accountId).executeAsOneOrNull() == AccountType.Credit.dbName) { "Charges go on a credit account" }
+        insert("EXPENSE", centavos, accountId, null, chargeCategory(charge), occurredAt, null)
     }
 
     /** Every payment's money, for the Flow summary. Re-sent when a payment changes. */
