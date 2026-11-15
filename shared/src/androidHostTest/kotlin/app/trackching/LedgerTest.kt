@@ -756,7 +756,7 @@ class LedgerTest {
     fun aFormat1BackupStillRestores() {
         val old = ledger.backupFile(d(5, 4))
         val text = encodeBackup(old)
-            .replace("\"format\": 9", "\"format\": 1")
+            .replace("\"format\": 10", "\"format\": 1")
             .substringBefore(",\n    \"repeats\"") + "\n}"
         ledger.eraseAll()
         val opened = openBackup(text)
@@ -1608,5 +1608,79 @@ class LedgerTest {
     @Test
     fun chargesOnlyGoOnCredit() {
         assertFailsWith<IllegalArgumentException> { ledger.addCharge(cash(), ChargeKind.AnnualFee, 1_000, 1) }
+    }
+
+    // P3-15: buy in installments on a credit account
+
+    private fun earphones(bpi: Long): Long {
+        val plan = CardPlanForm().apply { on = true; count = 6; each = "1064"; firstDue = d(2, 15) }.plan(600_000, "Earphones")!!
+        return ledger.buyInInstallments(600_000, category("Meals"), bpi, 100, null, plan)
+    }
+
+    @Test
+    fun theFullPriceIsSpendingTodayAndOwed() {
+        val bpi = card()
+        earphones(bpi)
+        assertEquals(600_000, owed(bpi))
+        assertEquals(600_000, ledger.totals(0, 1_000).spent)
+        assertEquals(6, db.creditQueries.allCardPayments().executeAsList().size)
+    }
+
+    @Test
+    fun payingADuePaymentChargesItsInterestAndTransfersTheWhole() {
+        val bpi = card()
+        earphones(bpi)
+        val before = ledger.balance(cash())
+        val due = ledger.dueCardPayments(d(2, 15)).single()
+        assertEquals(cash(), ledger.cardPayFrom())
+        assertTrue(ledger.payCardPayment(due.id, cash(), 2_000))
+        assertEquals(before - 106_400, ledger.balance(cash()))
+        assertEquals(600_000 - 100_000, owed(bpi)) // the ₱1,000 of price is paid; the ₱64 interest was charged and paid
+        assertEquals(6_400, ledger.totals(1_500, 3_000).spent)
+        assertFalse(ledger.payCardPayment(due.id, cash(), 2_000)) // a double tap pays once
+        assertEquals(emptyList(), ledger.dueCardPayments(d(2, 15)))
+    }
+
+    @Test
+    fun cardPaymentsCantComeFromACard() {
+        val bpi = card()
+        earphones(bpi)
+        val due = ledger.dueCardPayments(d(2, 15)).single()
+        assertFailsWith<IllegalArgumentException> { ledger.payCardPayment(due.id, bpi, 1) }
+    }
+
+    @Test
+    fun installmentsAreOnlyForCredit() {
+        val plan = CardPlanForm().apply { on = true; each = "400"; firstDue = d(2, 15) }.plan(1_000, "x")!!
+        assertFailsWith<IllegalArgumentException> { ledger.buyInInstallments(1_000, category("Meals"), cash(), 1, null, plan) }
+    }
+
+    @Test
+    fun dueCardPaymentsCountTowardTheBadge() = runBlocking {
+        earphones(card())
+        assertEquals(0, ledger.dueCount(d(2, 14)).first())
+        assertEquals(2, ledger.dueCount(d(3, 15)).first())
+    }
+
+    @Test
+    fun theCreditRowShowsThePlan() = runBlocking {
+        val bpi = card()
+        earphones(bpi)
+        val line = ledger.cardPlanLines().first().single()
+        assertEquals(bpi, line.accountId)
+        assertEquals("Earphones · 6 of 6 payments left", line.title)
+        assertEquals(38_400, line.interest)
+    }
+
+    @Test
+    fun backupKeepsCardPlans() {
+        val bpi = card()
+        earphones(bpi)
+        ledger.payCardPayment(ledger.dueCardPayments(d(2, 15)).single().id, cash(), 2_000)
+        val file = ledger.backupFile(d(5, 4))
+        ledger.eraseAll()
+        ledger.restore(openBackup(encodeBackup(file)).let { (it as Opened.Ok).file })
+        assertEquals(1, db.creditQueries.allCardPayments().executeAsList().count { it.paid_txn_id != null })
+        assertEquals(500_000, owed(bpi))
     }
 }
