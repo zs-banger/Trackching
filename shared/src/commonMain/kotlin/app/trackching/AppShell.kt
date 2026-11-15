@@ -149,6 +149,7 @@ private fun MainShell(
     val overdue by remember(ledger) { ledger.overdueCount(today) }.collectAsState(initial = 0)
     var newIou by remember { mutableStateOf<IouKind?>(null) }   // New IOU, starting on this kind (P3-8)
     var editingIou by remember { mutableStateOf<Long?>(null) }  // Edit IOU: its id (P3-8)
+    var payingIou by remember { mutableStateOf<Long?>(null) }   // Record payment / Payment received / Hand back (P3-9)
     // Once per app start: anything due opens the check-in.
     LaunchedEffect(Unit) {
         if (ledger.dueRepeats(today).isNotEmpty()) checkingIn = true
@@ -293,7 +294,7 @@ private fun MainShell(
                         today = today,
                         backTo = page.from,
                         onBack = ::back,
-                        onRecord = { scope.launch { snackbar.showSnackbar("Recording payments comes in a later update") } }, // P3-9
+                        onRecord = { payingIou = page.id },
                         onEdit = { editingIou = page.id },
                         onDeletedPayment = { deleted -> showUndo("Payment deleted") { ledger.restorePayment(deleted) } },
                     )
@@ -400,6 +401,16 @@ private fun MainShell(
                     startKind = kind,
                     onDismiss = { newIou = null },
                     onSaved = { scope.launch { snackbar.showSnackbar("IOU saved") } },
+                )
+            }
+            payingIou?.let { id ->
+                PaymentSheet(
+                    ledger,
+                    iouId = id,
+                    onDismiss = { payingIou = null },
+                    onSaved = { paymentId ->
+                        showUndo("Payment saved") { ledger.deletePayment(paymentId) }
+                    },
                 )
             }
             editingIou?.let { id ->
