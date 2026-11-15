@@ -13,6 +13,9 @@ import app.trackching.db.EventSpendingBetween
 import app.trackching.db.ExpensesByEvent
 import app.trackching.db.Iou_payment
 import app.trackching.db.CreditAccounts
+import app.trackching.db.Credit_plan
+import app.trackching.db.Credit_installment
+import app.trackching.db.DueCardPayments
 import app.trackching.db.Iou_installment
 import app.trackching.db.DueInstallments
 import app.trackching.db.IouDetail
@@ -582,6 +585,10 @@ class Ledger(private val db: TrackchingDatabase) {
                 val open = rows.filterNot { it.settled }.map { it.id }.toSet()
                 repeats + parts.count { it.iou_id in open && LocalDate.parse(it.due_on) <= today }
             }
+            .combine(db.creditQueries.allCardPayments().asFlow().mapToList(Dispatchers.Default)) { count, card ->
+                // P3-15: and card payments, until they're paid.
+                count + card.count { it.paid_txn_id == null && LocalDate.parse(it.due_on) <= today }
+            }
 
     /** Dates after today and up to 7 days from now: "Coming up this week". */
     fun upcomingRepeats(today: LocalDate): List<DueRepeat> {
@@ -864,6 +871,70 @@ class Ledger(private val db: TrackchingDatabase) {
         if (kind == "INCOME") subcategory("INCOME", "Interest", "From IOUs", 0xFF6B93D6)
         else chargeCategory(ChargeKind.Interest)
 
+    /** Whether an account is a card or lender (P3-12). */
+    fun isCredit(accountId: Long): Boolean = db.accountQueries.typeOf(accountId).executeAsOneOrNull() == AccountType.Credit.dbName
+
+    /** Ids of the active credit accounts, so the Add sheet knows when to offer Installments. */
+    fun creditIds(): Set<Long> = db.accountQueries.creditAccounts().executeAsList().map { it.id }.toSet()
+
+    /**
+     * P3-15: buy in installments on a credit account. The full price is spending today (it adds to what's owed),
+     * and each payment waits in the check-in. Returns the purchase's transaction id.
+     */
+    fun buyInInstallments(
+        price: Long,
+        categoryId: Long,
+        accountId: Long,
+        occurredAt: Long,
+        eventId: Long?,
+        plan: NewCardPlan,
+    ): Long = db.transactionWithResult {
+        require(isCredit(accountId)) { "Installments are for credit accounts" }
+        require(plan.payments.isNotEmpty()) { "A plan needs payments" }
+        require(plan.payments.sumOf { it.centavos } >= price) { "The payments add up to less than the price" }
+        require(plan.payments.sumOf { it.interest } == plan.payments.sumOf { it.centavos } - price) { "The interest parts don't add up" }
+        val txnId = insert("EXPENSE", price, accountId, null, categoryId, occurredAt, eventId)
+        db.creditQueries.insertPlan(accountId, plan.name.trim().ifEmpty { "Installments" }, price, txnId)
+        val planId = db.creditQueries.lastId().executeAsOne()
+        plan.payments.forEachIndexed { i, p ->
+            db.creditQueries.insertInstallment(planId, i + 1L, p.dueOn.toString(), p.centavos, p.interest)
+        }
+        txnId
+    }
+
+    /** Every card plan with payments still waiting, re-sent when one is paid. */
+    fun cardPlanLines(): Flow<List<CardPlanLine>> =
+        db.creditQueries.allCardPayments().asFlow().mapToList(Dispatchers.Default).map(::cardPlanLines)
+
+    /** Card payments due by [today] and not paid, oldest first, for the check-in. */
+    fun dueCardPayments(today: LocalDate): List<DueCardPayments> =
+        db.creditQueries.dueCardPayments(today.toString()).executeAsList()
+
+    /** Where a card payment's money comes from: the last account used, if it isn't credit, else the first that isn't. */
+    fun cardPayFrom(): Long? {
+        val last = lastAccountUsed()
+        if (last != null && !isCredit(last)) return last
+        return accounts().map { it.id }.firstOrNull { !isCredit(it) }
+    }
+
+    /**
+     * Check-in Save for a due card payment (P3-15): its interest part is spending under Fees & Charges › Interest,
+     * charged to the card, and the whole payment is a transfer from [fromAccountId] to the card.
+     * So what's owed drops by the principal part. False if it was already paid (a double tap).
+     */
+    fun payCardPayment(paymentId: Long, fromAccountId: Long, occurredAt: Long): Boolean = db.transactionWithResult {
+        val part = db.creditQueries.cardPaymentById(paymentId).executeAsOne()
+        if (part.paid_txn_id != null) return@transactionWithResult false
+        require(!isCredit(fromAccountId)) { "Pay from cash, bank or e-wallet" }
+        val accountId = db.creditQueries.planAccount(part.plan_id).executeAsOne()
+        val interestTxn = if (part.interest_centavos > 0) {
+            insert("EXPENSE", part.interest_centavos, accountId, null, chargeCategory(ChargeKind.Interest), occurredAt, null)
+        } else null
+        val paid = insert("TRANSFER", part.centavos, fromAccountId, accountId, null, occurredAt, null)
+        db.creditQueries.markPaid(interestTxnId = interestTxn, paidTxnId = paid, id = paymentId)
+        true
+    }
+
     /** Fees & Charges › Interest, Late fee or Annual fee (P3-14). Made if it's not there. */
     fun chargeCategory(charge: ChargeKind): Long = subcategory("EXPENSE", "Fees & Charges", charge.label, 0xFF8A6D5C)
 
@@ -916,6 +987,7 @@ class Ledger(private val db: TrackchingDatabase) {
     fun eraseAll() {
         db.transaction {
             db.iouQueries.eraseAll() // first: an IOU points at its transaction
+            db.creditQueries.eraseAll() // and a card plan at its account
             db.txnQueries.eraseAll()
             db.repeatRuleQueries.eraseAll()
             db.eventQueries.eraseRuns()
@@ -962,6 +1034,12 @@ class Ledger(private val db: TrackchingDatabase) {
         installments = db.iouQueries.backupInstallments().executeAsList().map {
             InstallmentBackup(it.id, it.iou_id, it.n, it.due_on, it.centavos, it.interest_centavos, it.state, it.payment_id)
         },
+        cardPlans = db.creditQueries.backupPlans().executeAsList().map {
+            CardPlanBackup(it.id, it.account_id, it.name, it.principal_centavos, it.txn_id)
+        },
+        cardPayments = db.creditQueries.backupInstallments().executeAsList().map {
+            CardPaymentBackup(it.id, it.plan_id, it.n, it.due_on, it.centavos, it.interest_centavos, it.interest_txn_id, it.paid_txn_id)
+        },
     )
 
     /** Replaces everything with the backup. All or nothing: if any row fails, the old data stays. */
@@ -1003,6 +1081,14 @@ class Ledger(private val db: TrackchingDatabase) {
             file.installments.forEach {
                 db.iouQueries.backupInsertInstallment(
                     Iou_installment(it.id, it.iouId, it.n, it.dueOn, it.centavos, it.interestCentavos, it.state, it.paymentId),
+                )
+            }
+            file.cardPlans.forEach {
+                db.creditQueries.backupInsertPlan(Credit_plan(it.id, it.accountId, it.name, it.principalCentavos, it.txnId))
+            }
+            file.cardPayments.forEach {
+                db.creditQueries.backupInsertInstallment(
+                    Credit_installment(it.id, it.planId, it.n, it.dueOn, it.centavos, it.interestCentavos, it.interestTxnId, it.paidTxnId),
                 )
             }
             file.settings.forEach { (key, value) -> db.settingQueries.put(key, value) }

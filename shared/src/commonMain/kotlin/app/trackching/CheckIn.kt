@@ -2,6 +2,7 @@ package app.trackching
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
+import app.trackching.db.DueCardPayments
 import app.trackching.db.DueInstallments
 
 enum class RowState { Waiting, Saved, Skipped }
@@ -68,4 +69,38 @@ class InstallmentCheckIn(val rows: List<DueInstallments>) {
     fun canAct(i: Int): Boolean = states[i] == RowState.Waiting && blockedBy(i) == null
 
     val waiting: Int get() = states.count { it == RowState.Waiting }
+}
+
+/**
+ * The check-in's card payments (P3-15). They can't be skipped: Not yet leaves one here until it's paid.
+ * A plan's later payment waits for its earlier one.
+ */
+class CardCheckIn(val rows: List<DueCardPayments>) {
+    private val states = mutableStateListOf<RowState>().apply { repeat(rows.size) { add(RowState.Waiting) } }
+    private val notYet = mutableStateListOf<Int>()
+
+    fun stateOf(i: Int): RowState = states[i]
+
+    fun isNotYet(i: Int): Boolean = i in notYet
+
+    fun markSaved(i: Int) {
+        states[i] = RowState.Saved
+        notYet.remove(i)
+    }
+
+    /** "It stays here until you pay it." Nothing is saved, and Save all leaves it. */
+    fun markNotYet(i: Int) {
+        if (i !in notYet) notYet.add(i)
+    }
+
+    /** The same plan's earlier payment that isn't paid yet. */
+    fun blockedBy(i: Int): DueCardPayments? =
+        (0 until i).firstOrNull { rows[it].plan_id == rows[i].plan_id && states[it] != RowState.Saved }?.let { rows[it] }
+
+    fun canAct(i: Int): Boolean = states[i] == RowState.Waiting && blockedBy(i) == null
+
+    /** For Save all: waiting, and not put off with Not yet. */
+    fun canSaveAll(i: Int): Boolean = canAct(i) && !isNotYet(i)
+
+    val waiting: Int get() = rows.indices.count { states[it] == RowState.Waiting && !isNotYet(it) }
 }
