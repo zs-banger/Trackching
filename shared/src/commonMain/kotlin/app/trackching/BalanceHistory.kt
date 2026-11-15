@@ -34,7 +34,7 @@ fun effectOn(accountId: Long, move: Movements): Long = when {
     move.kind == "EXPENSE" && move.account_id == accountId -> -move.centavos
     move.kind == "TRANSFER" && move.account_id == accountId -> -move.centavos
     move.kind == "TRANSFER" && move.to_account_id == accountId -> move.centavos
-    move.kind == ADJUSTMENT && move.account_id == accountId -> move.centavos
+    (move.kind == ADJUSTMENT || move.kind == IOU) && move.account_id == accountId -> move.centavos
     else -> 0L
 }
 

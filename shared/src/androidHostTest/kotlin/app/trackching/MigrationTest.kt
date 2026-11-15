@@ -75,4 +75,29 @@ class MigrationTest {
 
         assertNull(TrackchingDatabase(driver).txnQueries.byId(1).executeAsOne().repeat_id)
     }
+
+    @Test
+    fun rebuildingTxnKeepsEveryColumn() {
+        val driver = openCopyOfVersion1()
+        addOneExpense(driver)
+
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
+
+        val txn = TrackchingDatabase(driver).txnQueries.byId(1).executeAsOne()
+        assertEquals("EXPENSE", txn.kind)
+        assertEquals(1L, txn.account_id)
+    }
+
+    @Test
+    fun afterUpgradingAnIouCanBeSaved() {
+        val driver = openCopyOfVersion1()
+        addOneExpense(driver)
+
+        TrackchingDatabase.Schema.migrate(driver, 1, TrackchingDatabase.Schema.version)
+
+        val ledger = Ledger(TrackchingDatabase(driver))
+        val id = ledger.addIou(NewIou(IouKind.OWE, "Juan", 50_000, "", LocalDate(2026, 1, 15)), 1, 0)
+        assertEquals(50_000, ledger.iouLeft(id))
+        assertEquals(50_000 - 12_000, ledger.balance(1))
+    }
 }

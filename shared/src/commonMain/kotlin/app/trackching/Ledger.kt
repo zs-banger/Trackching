@@ -7,6 +7,8 @@ import app.trackching.db.Balances
 import app.trackching.db.MostUsed
 import app.trackching.db.Totals
 import app.trackching.db.TrackchingDatabase
+import app.trackching.db.Iou
+import app.trackching.db.Iou_payment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -457,6 +459,42 @@ class Ledger(private val db: TrackchingDatabase) {
             )
         }
 
+    /**
+     * Saves an IOU and moves the money in or out of [accountId] as one 'IOU' transaction,
+     * so the balance changes but it's never income or spending. Returns the IOU's id.
+     */
+    fun addIou(iou: NewIou, accountId: Long, occurredAt: Long): Long = db.transactionWithResult {
+        val name = iou.person.trim()
+        require(name.isNotEmpty()) { "An IOU needs a person" }
+        require(iou.centavos > 0) { "An IOU needs an amount" }
+        require(iou.kind != IouKind.HOLDING || iou.interest == Interest.None) { "Money you're holding has no interest" }
+        interestOf(IouTerms(iou.centavos, iou.interest, iou.openedOn, iou.dueOn)) // fails early on a bad interest
+
+        db.iouQueries.addPerson(name)
+        val personId = db.iouQueries.personId(name).executeAsOne()
+        db.txnQueries.insert(IOU, iou.kind.sign * iou.centavos, accountId, null, null, occurredAt)
+        val txnId = db.txnQueries.lastId().executeAsOne()
+        db.iouQueries.insert(
+            iou.kind.name, personId, iou.centavos, iou.whatFor.trim(), iou.openedOn.toString(), iou.dueOn?.toString(),
+            iou.interest.kindName(), iou.interest.value(), iou.note.trim(), txnId,
+        )
+        db.iouQueries.lastId().executeAsOne()
+    }
+
+    /** Remembered names that start with what's typed, for the suggestions under the field. */
+    fun personNames(typed: String): List<String> = db.iouQueries.namesLike(typed.trim()).executeAsList()
+
+    /** What's left on an IOU, interest included. */
+    fun iouLeft(id: Long): Long {
+        val iou = db.iouQueries.byId(id).executeAsOne()
+        val terms = IouTerms(
+            iou.centavos, interestFrom(iou.interest_kind, iou.interest_value),
+            LocalDate.parse(iou.opened_on), iou.due_on?.let { LocalDate.parse(it) },
+        )
+        val paid = db.iouQueries.paymentsOf(id).executeAsList().map { Paid(it.principal_centavos, it.interest_centavos) }
+        return leftOf(terms, paid)
+    }
+
     /** Whether amounts are hidden (the HIDE ₱ button). Off until you turn it on. */
     fun amountsHidden(): Boolean =
         db.settingQueries.get("amounts_hidden").executeAsOneOrNull() == "true"
@@ -487,6 +525,7 @@ class Ledger(private val db: TrackchingDatabase) {
     /** Erase all data: every transaction, event, category, account and setting. Setup runs again. */
     fun eraseAll() {
         db.transaction {
+            db.iouQueries.eraseAll() // first: an IOU points at its transaction
             db.txnQueries.eraseAll()
             db.repeatRuleQueries.eraseAll()
             db.eventQueries.eraseAll()
@@ -518,6 +557,16 @@ class Ledger(private val db: TrackchingDatabase) {
                 it.kind, it.centavos, it.account_id, it.to_account_id, it.category_id,
             )
         },
+        people = db.iouQueries.backupPeople().executeAsList().map { PersonBackup(it.id, it.name) },
+        ious = db.iouQueries.backupIous().executeAsList().map {
+            IouBackup(
+                it.id, it.kind, it.person_id, it.centavos, it.what_for, it.opened_on, it.due_on,
+                it.interest_kind, it.interest_value, it.note, it.txn_id,
+            )
+        },
+        iouPayments = db.iouQueries.backupPayments().executeAsList().map {
+            IouPaymentBackup(it.id, it.iou_id, it.txn_id, it.principal_centavos, it.interest_centavos)
+        },
     )
 
     /** Replaces everything with the backup. All or nothing: if any row fails, the old data stays. */
@@ -540,6 +589,17 @@ class Ledger(private val db: TrackchingDatabase) {
             file.txns.forEach {
                 db.txnQueries.backupInsert(it.id, it.kind, it.centavos, it.accountId, it.toAccountId, it.categoryId, it.occurredAt, it.eventId, it.repeatId)
             }
+            // After txns: an IOU and its payments point at their transactions.
+            file.people.forEach { db.iouQueries.backupInsertPerson(it.id, it.name) }
+            file.ious.forEach {
+                db.iouQueries.backupInsertIou(Iou(
+                    it.id, it.kind, it.personId, it.centavos, it.whatFor, it.openedOn, it.dueOn,
+                    it.interestKind, it.interestValue, it.note, it.txnId,
+                ))
+            }
+            file.iouPayments.forEach {
+                db.iouQueries.backupInsertPayment(Iou_payment(it.id, it.iouId, it.txnId, it.principalCentavos, it.interestCentavos))
+            }
             file.settings.forEach { (key, value) -> db.settingQueries.put(key, value) }
 
             db.settingQueries.put("setup_done", "true") // a restored phone never shows setup again
@@ -555,17 +615,18 @@ class Ledger(private val db: TrackchingDatabase) {
 
     /** Every transaction as a spreadsheet, oldest first. */
     fun csv(zone: TimeZone): String {
-        val header = csvLine(listOf("date", "type", "amount", "account", "to account", "category", "subcategory", "event"))
+        val header = csvLine(listOf("date", "type", "amount", "account", "to account", "category", "subcategory", "event", "person"))
         val rows = db.txnQueries.csvRows().executeAsList().map {
             csvLine(listOf(
                 dayOf(it.occurred_at, zone).toString(),
-                it.kind.lowercase().replaceFirstChar { c -> c.uppercase() },
+                if (it.kind == IOU) IOU else it.kind.lowercase().replaceFirstChar { c -> c.uppercase() },
                 plainAmount(it.centavos),
                 it.account,
                 it.to_account,
                 it.category,
                 it.subcategory,
                 it.event,
+                it.person
             ))
         }
         return (listOf(header) + rows).joinToString("\r\n", postfix = "\r\n")
