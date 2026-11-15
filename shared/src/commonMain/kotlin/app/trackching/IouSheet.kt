@@ -103,8 +103,19 @@ fun IouSheet(
             if (form.kind != IouKind.HOLDING) {
                 SheetLabel("Due")
                 ChipRow {
-                    Chip("No due date", selected = form.dueOn == null, onClick = { form.dueOn = null })
-                    Chip(form.dueOn?.let { dateLabel(it) } ?: "Pick a date", selected = form.dueOn != null, onClick = { picking = "due" })
+                    Chip("One date", selected = !form.inParts, onClick = { form.inParts = false })
+                    Chip("Installments", selected = form.inParts, onClick = { form.inParts = true })
+                }
+                when {
+                    form.inParts && form.planLocked -> Text(
+                        "${form.lockedLine ?: "Paid in parts"}. The plan can't change once a payment is saved or skipped.",
+                        color = c.ink2, fontSize = 13.sp,
+                    )
+                    form.inParts -> InstallmentFields(form, onPickFirst = { picking = "first" })
+                    else -> ChipRow {
+                        Chip("No due date", selected = form.dueOn == null, onClick = { form.dueOn = null })
+                        Chip(form.dueOn?.let { dateLabel(it) } ?: "Pick a date", selected = form.dueOn != null, onClick = { picking = "due" })
+                    }
                 }
             }
 
@@ -186,13 +197,71 @@ fun IouSheet(
 
     picking?.let { which ->
         PickDate(
-            initial = if (which == "opened") form.openedOn else (form.dueOn ?: form.openedOn),
+            initial = when (which) {
+                "opened" -> form.openedOn
+                "first" -> form.firstDue ?: form.openedOn
+                else -> form.dueOn ?: form.openedOn
+            },
             onPicked = { day ->
-                if (which == "opened") form.openedOn = day else form.dueOn = day
+                when (which) {
+                    "opened" -> form.openedOn = day
+                    "first" -> form.firstDue = day
+                    else -> form.dueOn = day
+                }
                 picking = null
             },
             onDismiss = { picking = null },
         )
+    }
+}
+
+/** P3-17: how many payments, every week or month, the first due date, and each amount. */
+@Composable
+private fun InstallmentFields(form: IouForm, onPickFirst: () -> Unit) {
+    val c = TrackchingTheme.colors
+    OutlinedTextField(
+        value = form.partsCount,
+        onValueChange = { form.partsCount = it.filter(Char::isDigit).take(2); form.fitAmounts() },
+        label = { Text("Number of payments") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    ChipRow {
+        InstallmentUnits.forEach { u -> Chip("Every ${u.one}", selected = form.partsUnit == u, onClick = { form.partsUnit = u }) }
+    }
+    SheetLabel("First payment")
+    Chip(form.firstDue?.let { dateLabel(it) } ?: "Pick a date", selected = form.firstDue != null, onClick = onPickFirst)
+    ChipRow {
+        Chip("Same each time", selected = form.sameEach, onClick = { form.sameEach = true })
+        Chip("They differ", selected = !form.sameEach, onClick = { form.sameEach = false; form.fitAmounts() })
+    }
+    val dates = form.partDates
+    val plan = form.plan
+    if (form.sameEach) {
+        if (plan != null) {
+            val first = plan.first().centavos
+            val last = plan.last().centavos
+            val each = if (first == last) "₱${formatCentavos(first)} each" else "₱${formatCentavos(first)} each, last ₱${formatCentavos(last)}"
+            Text("$each · last due ${dateLabel(plan.last().dueOn)}", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+    } else if (dates != null) {
+        form.partsTotal?.let { Text("They must add up to ₱${formatCentavos(it)}", color = c.ink2, fontSize = 13.sp) }
+        dates.forEachIndexed { i, date ->
+            if (i < form.partAmounts.size) {
+                OutlinedTextField(
+                    value = form.partAmounts[i],
+                    onValueChange = { form.partAmounts[i] = it },
+                    label = { Text("${i + 1}. ${dateLabel(date)} (₱)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+    if (plan != null && plan.any { it.interest > 0 }) {
+        Text("Each payment carries its share of the interest.", color = c.ink2, fontSize = 13.sp)
     }
 }
 

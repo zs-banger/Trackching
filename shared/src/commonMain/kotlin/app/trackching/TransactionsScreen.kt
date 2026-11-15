@@ -86,8 +86,8 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val repeats = if (waiting == 1) "1 repeat" else "$waiting repeats"
-                Text("$repeats waiting for your OK", Modifier.weight(1f), color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                val things = if (waiting == 1) "1 thing" else "$waiting things" // repeats and IOU payments (P3-17)
+                Text("$things waiting for your OK", Modifier.weight(1f), color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Text("›", color = c.ink, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
