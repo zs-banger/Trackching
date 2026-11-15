@@ -240,8 +240,8 @@ class LedgerTest {
 
     @Test
     fun databaseAlsoBlocksDuplicates() {
-        db.accountQueries.create("BPI", "BANK", AccountColors[2], 0)
-        assertFails { db.accountQueries.create("bpi", "BANK", AccountColors[2], 0) }
+        db.accountQueries.create("BPI", "BANK", AccountColors[2], 0, null, null)
+        assertFails { db.accountQueries.create("bpi", "BANK", AccountColors[2], 0, null, null) }
     }
 
     @Test
