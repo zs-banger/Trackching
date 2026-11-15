@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.trackching.db.CreditAccounts
 import kotlinx.datetime.LocalDate
 
 /** S14: the IOUs tab. I owe / Owed to me / Holding, each with its total and its people. */
@@ -45,6 +46,7 @@ fun IousScreen(
     var kind by rememberSaveable { mutableStateOf(IouKind.OWE) }
     var showSettled by rememberSaveable { mutableStateOf(false) }
     val view = remember(rows, kind) { tabOf(rows, kind) }
+    val credit by remember(ledger) { ledger.creditAccounts() }.collectAsState(initial = emptyList())
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
         item(key = "tabs") {
@@ -61,13 +63,24 @@ fun IousScreen(
                 }
             }
         }
-        if (view.people.isEmpty()) {
+        if (view.people.isEmpty() && !(kind == IouKind.OWE && credit.isNotEmpty())) {
             item(key = "empty") {
                 EmptyState(emptyMessage(kind), newLabel(kind), { onNew(kind) }, Modifier.padding(horizontal = 16.dp))
             }
         }
         items(view.people, key = { "person-${it.personId}" }) { line ->
             PersonRow(line, onClick = { onOpenPerson(line, kind) })
+        }
+        // P3-12: what I owe cards and lenders, under I owe.
+        if (kind == IouKind.OWE && credit.isNotEmpty()) {
+            item(key = "credit-title") {
+                Text(
+                    "CREDIT",
+                    Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
+                    color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                )
+            }
+            items(credit, key = { "credit-${it.id}" }) { CreditRow(it, today) }
         }
         if (view.settled.isNotEmpty()) {
             item(key = "settled") {
@@ -96,6 +109,26 @@ private fun newLabel(kind: IouKind) = when (kind) {
     IouKind.OWE -> "I owe someone"
     IouKind.OWED -> "Someone owes me"
     IouKind.HOLDING -> "I'm holding money"
+}
+
+/** A card or lender: "₱X owed", when it's due, and the minimum. */
+@Composable
+private fun CreditRow(card: CreditAccounts, today: LocalDate) {
+    val c = TrackchingTheme.colors
+    Row(
+        Modifier.fillMaxWidth().background(c.band).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(card.name, color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(creditDueLine(card.due_day, today), color = c.ink2, fontSize = 13.sp)
+            card.minimum_centavos?.let {
+                Text("Minimum ${shown(formatAmount(it, AmountKind.Transfer))}", color = c.ink2, fontSize = 13.sp)
+            }
+        }
+        Text("${shown(formatAmount(card.owedNow, AmountKind.Transfer))} owed", color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+    }
 }
 
 @Composable

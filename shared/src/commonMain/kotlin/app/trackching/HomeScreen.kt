@@ -77,7 +77,8 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEv
             }
             val total = totalBalance(balances)
             Amount(total, if (total < 0) AmountKind.Expense else AmountKind.Transfer, maxFontSize = 36.sp)
-            balances.forEach { account ->
+            // Credit isn't money I have, so it's on Accounts and IOUs, not here (P3-12).
+            balances.filterNot { it.isCredit }.forEach { account ->
                 Row(
                     Modifier.fillMaxWidth().clickable(role = Role.Button) { adjusting = account },
                     horizontalArrangement = Arrangement.spacedBy(10.dp),

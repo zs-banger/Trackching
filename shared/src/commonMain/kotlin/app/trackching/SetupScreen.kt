@@ -77,7 +77,7 @@ fun SetupScreen(ledger: Ledger, onDone: () -> Unit, onRestored: () -> Unit) {
             when (form.step) {
                 1 -> {
                     Text("Start with one account. You can add GCash, banks and more later.", color = c.ink2)
-                    AccountFields(form.account)
+                    AccountFields(form.account, allowCredit = false)
                     TextButton(onClick = { openFile() }) {
                         Text("I have a backup. Restore it", color = c.blue, fontWeight = FontWeight.Bold)
                     }
