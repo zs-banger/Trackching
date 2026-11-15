@@ -1496,4 +1496,33 @@ class LedgerTest {
         ledger.restore(openBackup(encodeBackup(file)).let { (it as Opened.Ok).file })
         assertEquals(listOf("SAVED", "WAITING"), parts(id).map { it.state })
     }
+
+    // P3-10: held money and net worth
+
+    @Test
+    fun heldMoneyIsCountedPerAccountUntilHandedBack() = runBlocking {
+        val held = iou(IouKind.HOLDING, "Maria", 30_000)
+        assertEquals(mapOf(cash() to 30_000L), ledger.held().first())
+        ledger.recordPayment(held, 30_000, 0, cash(), 1)
+        assertEquals(emptyMap(), ledger.held().first())
+    }
+
+    @Test
+    fun netWorthCountsEveryOpenIou() = runBlocking {
+        iou(IouKind.OWED, centavos = 20_000)
+        iou(IouKind.OWE, centavos = 50_000)
+        iou(IouKind.HOLDING, "Maria", 30_000)
+        val worth = ledger.netWorth(d(2, 1)).first()
+        assertEquals(Triple(20_000L, 50_000L, 30_000L), Triple(worth.owedToMe, worth.iOwe, worth.holding))
+        assertEquals(worth.total + 20_000 - 50_000 - 30_000, worth.worth)
+    }
+
+    @Test
+    fun anAccountHoldingMoneyCantBeArchived() {
+        ledger.addAccount("BDO", AccountType.Bank, AccountColors.first(), 0)
+        iou(IouKind.HOLDING, "Maria", 30_000)
+        assertTrue(ledger.holdsMoney(cash()))
+        val e = assertFailsWith<IllegalArgumentException> { ledger.archive(cash()) }
+        assertEquals(HandBackFirst, e.message)
+    }
 }
