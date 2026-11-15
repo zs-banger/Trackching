@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -124,6 +126,11 @@ fun SettingsScreen(
             saveCsv("trackching-transactions-$today.csv", ledger.csv(zone))
         }
 
+        if (remindersSupported) {
+            Group("Reminders · Android only")
+            Reminders(ledger, onRefused = { message = NotificationsOff })
+        }
+
         Group("About")
         Text("Your data never leaves this phone.", color = c.ink)
         Text("Version $version", color = c.ink2)
@@ -193,6 +200,50 @@ fun SettingsScreen(
             text = { Text(text) },
             confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } },
         )
+    }
+}
+
+const val NotificationsOff =
+    "Reminders need notifications. You can allow them for Trackching in your phone's settings."
+
+/** P3-11: the three switches. Turning one on asks for notification permission the first time. */
+@Composable
+private fun Reminders(ledger: Ledger, onRefused: () -> Unit) {
+    val control = rememberReminderControl()
+    val on = remember(ledger) { mutableStateMapOf<ReminderSwitch, Boolean>().apply { ReminderSwitch.entries.forEach { put(it, ledger.reminderOn(it)) } } }
+    ReminderSwitch.entries.forEach { switch ->
+        SwitchRow(switch.title, switch.detail, on[switch] == true) { want ->
+            if (!want) {
+                on[switch] = false
+                ledger.setReminder(switch, false)
+                control.schedule(ledger.anyReminderOn())
+            } else {
+                control.ask { allowed ->
+                    if (allowed) {
+                        on[switch] = true
+                        ledger.setReminder(switch, true)
+                        control.schedule(true)
+                    } else {
+                        onRefused() // the switch stays off
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(label: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val c = TrackchingTheme.colors
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Switch) { onChange(!checked) }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(label, color = c.ink, fontWeight = FontWeight.Bold)
+            Text(detail, color = c.ink2, fontSize = 13.sp)
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

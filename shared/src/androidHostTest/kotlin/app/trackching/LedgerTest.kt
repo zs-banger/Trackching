@@ -1784,4 +1784,54 @@ class LedgerTest {
         assertFailsWith<IllegalArgumentException> { ledger.borrow(bpi, 500_000, cash(), plan, 1) }
         assertFailsWith<IllegalArgumentException> { ledger.borrow(cash(), 100_000, bpi, plan, 1) }
     }
+
+    // P3-11: reminders
+
+    private fun owe(due: LocalDate) =
+        ledger.addIou(NewIou(IouKind.OWE, "Maria", 50_000, "Lunch", d(3, 1), dueOn = due), cash(), 0)
+
+    @Test
+    fun remindersAreOffUntilASwitchIsOn() {
+        owe(d(3, 10))
+        assertFalse(ledger.anyReminderOn())
+        assertEquals(emptyList(), ledger.reminders(d(3, 10)))
+    }
+
+    @Test
+    fun anIouRemindsTheMorningItsDueAndOnlyOnce() {
+        owe(d(3, 10))
+        ledger.setReminder(ReminderSwitch.Ious, true)
+        assertTrue(ledger.anyReminderOn())
+        val r = ledger.reminders(d(3, 10)).single()
+        assertEquals("IOU due today", r.title)
+        assertEquals("You owe Maria ₱ 500.00 · Lunch", r.text)
+        assertEquals(ReminderTarget.Ious, r.target)
+        assertEquals(emptyList(), ledger.reminders(d(3, 10))) // the second run today
+        assertEquals("IOU overdue", ledger.reminders(d(3, 11)).single().title)
+    }
+
+    @Test
+    fun remindersHideAmountsWhenHideIsOn() {
+        owe(d(3, 10))
+        ledger.setReminder(ReminderSwitch.Ious, true)
+        ledger.setAmountsHidden(true)
+        assertEquals("You owe Maria $MaskedAmount · Lunch", ledger.reminders(d(3, 10)).single().text)
+    }
+
+    @Test
+    fun aCardRemindsOnItsDueDayAndItsPaymentsToo() {
+        val bpi = card(owed = 10_000, dueDay = 15)
+        earphones(bpi) // first payment due Feb 15
+        ledger.setReminder(ReminderSwitch.Ious, true)
+        val titles = ledger.reminders(d(2, 15)).map { it.title }.sorted()
+        assertEquals(listOf("Card payment due today", "Credit bill due today"), titles)
+    }
+
+    @Test
+    fun theBackupNudgeComesOnceAMonth() {
+        ledger.setReminder(ReminderSwitch.Backup, true)
+        ledger.markBackedUp(d(1, 1))
+        assertEquals("Time for a backup", ledger.reminders(d(2, 1)).single().title)
+        assertEquals(emptyList(), ledger.reminders(d(2, 2)))
+    }
 }
