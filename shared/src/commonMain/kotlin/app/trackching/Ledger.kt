@@ -9,6 +9,7 @@ import app.trackching.db.Totals
 import app.trackching.db.TrackchingDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import app.trackching.db.History
 import app.trackching.db.Txn
 import app.trackching.db.ManageList
@@ -23,14 +24,23 @@ import app.trackching.db.Repeat_rule
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.trackching.db.Event
 import app.trackching.db.EventSpending
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
 
 /** A deleted event and the transactions it had, so Undo can put both back. */
 data class DeletedEvent(val event: Event, val txnIds: List<Long>)
 
 /** One date a repeat is waiting on. [n] is which time it is (0 = the start date). */
 data class DueRepeat(val n: Int, val date: LocalDate, val rule: Repeat_rule)
+
+/** How a repeat reads in the check-in: "Meals" over "GCash", or "Transfer" over "GCash → BDO". */
+data class RepeatLabel(val title: String, val subtitle: String)
+
+/** How many dates are waiting across [rows]. */
+fun countDue(rows: List<Repeat_rule>, today: LocalDate): Int =
+    rows.sumOf { it.toRule().due(it.done.toInt(), today).size }
 
 /** The saved row as a [RepeatRule]. */
 fun Repeat_rule.toRule() = RepeatRule(
@@ -374,10 +384,10 @@ class Ledger(private val db: TrackchingDatabase) {
      * Logs one due date as a transaction at [occurredAt] and moves its rule on.
      * Returns the new transaction's id, or null if that date was already handled (a double tap).
      */
-    fun saveDue(due: DueRepeat, occurredAt: Long): Long? = db.transactionWithResult {
+    fun saveDue(due: DueRepeat, occurredAt: Long, centavos: Long = due.rule.centavos): Long? = db.transactionWithResult {
         val r = due.rule
         val moved = db.repeatRuleQueries.moveOn(id = r.id, done = due.n.toLong()).value == 1L
-        if (moved) insert(r.kind, r.centavos, r.account_id, r.to_account_id, r.category_id, occurredAt)
+        if (moved) insert(r.kind, centavos, r.account_id, r.to_account_id, r.category_id, occurredAt)
             .also { db.txnQueries.setRepeat(r.id, it) }
         else null
     }
@@ -419,6 +429,33 @@ class Ledger(private val db: TrackchingDatabase) {
     fun stopRepeat(ruleId: Long) {
         db.repeatRuleQueries.stop(ruleId)
     }
+
+    /** The number waiting for an OK. Re-sent whenever a repeat changes, so the badge keeps up by itself. */
+    fun dueCount(today: LocalDate): Flow<Int> =
+        db.repeatRuleQueries.allRules().asFlow().mapToList(Dispatchers.Default).map { countDue(it, today) }
+
+    /** Dates after today and up to 7 days from now: "Coming up this week". */
+    fun upcomingRepeats(today: LocalDate): List<DueRepeat> {
+        val weekOut = today.plus(7, DateTimeUnit.DAY)
+        return db.repeatRuleQueries.allRules().executeAsList()
+            .flatMap { row ->
+                val rule = row.toRule()
+                generateSequence(row.done.toInt()) { it + 1 }
+                    .takeWhile { rule.hasTime(it) && rule.dateOf(it) <= weekOut }
+                    .filter { rule.dateOf(it) > today }
+                    .map { DueRepeat(it, rule.dateOf(it), row) }
+                    .toList()
+            }
+            .sortedBy { it.date }
+    }
+
+    fun repeatLabels(): Map<Long, RepeatLabel> =
+        db.repeatRuleQueries.labels().executeAsList().associate {
+            it.id to RepeatLabel(
+                title = it.category ?: "Transfer",
+                subtitle = if (it.to_account != null) "${it.account} → ${it.to_account}" else it.account,
+            )
+        }
 
     /** Whether amounts are hidden (the HIDE ₱ button). Off until you turn it on. */
     fun amountsHidden(): Boolean =
