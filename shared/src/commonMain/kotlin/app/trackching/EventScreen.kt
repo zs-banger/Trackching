@@ -1,5 +1,6 @@
 package app.trackching
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.flow.map
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +48,7 @@ fun EventScreen(
     onOpenTransactions: (Bucket, TypeTab) -> Unit,
     onLog: () -> Unit,
     onNewDates: () -> Unit = {},
+    onChangeDates: (EventRun) -> Unit = {},
 ) {
     val c = TrackchingTheme.colors
     val zone = remember { TimeZone.currentSystemDefault() }
@@ -60,8 +63,12 @@ fun EventScreen(
     val eventRows = remember(rows, ids) { rowsOfEvent(rows, ids.toSet()) }
     val loadedRuns by remember(ledger, eventId) { ledger.runs(eventId) }.collectAsState(initial = null)
     val runs = loadedRuns ?: return
-    // An occasional event shows one run: the active one, else the last finished, else the first upcoming (P3-19).
-    val run = remember(runs, today) { if (event.occasional) runToShow(runs, today) else null }
+    // An occasional event shows one run: the one picked on the History card (P3-20),
+    // else the active one, else the last finished, else the first upcoming (P3-19).
+    var pickedRun by rememberSaveable(eventId) { mutableStateOf<Long?>(null) }
+    val run = remember(runs, today, pickedRun) {
+        if (!event.occasional) null else runs.firstOrNull { it.id == pickedRun } ?: runToShow(runs, today)
+    }
 
     // A repeating event shows one period at a time; a one-off event shows all its dates.
     val weekStart = remember(ledger) { ledger.weekStart() }
@@ -106,8 +113,15 @@ fun EventScreen(
                 color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold,
             )
             if (event.occasional) {
-                TextButton(onClick = onNewDates) {
-                    Text("+ SET NEW DATES", color = c.orangeInk, fontWeight = FontWeight.Bold)
+                Row {
+                    TextButton(onClick = onNewDates) {
+                        Text("+ SET NEW DATES", color = c.orangeInk, fontWeight = FontWeight.Bold)
+                    }
+                    if (run != null) {
+                        TextButton(onClick = { onChangeDates(run) }) {
+                            Text("✎ CHANGE THESE DATES", color = c.orangeInk, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -165,6 +179,39 @@ fun EventScreen(
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     RankedBars(shares)
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Donut(shares) }
+                }
+            }
+        }
+        if (event.occasional && runs.isNotEmpty()) {
+            // P3-20: every run with its spending. Tap one to show it above.
+            val history = remember(runs, eventRows, today) {
+                historyOrder(runs, today).map { r ->
+                    r to flowOf(rowsIn(eventBucket(event.copy(start = r.first, end = r.last), today, zone), eventRows)).expenses
+                }
+            }
+            ChartCard("History", plural(runs.size.toLong(), "time")) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    history.forEach { (r, spent) ->
+                        val showing = r.id == run?.id
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable(role = Role.Button) { pickedRun = r.id }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                runLabel(r, today),
+                                Modifier.weight(1f),
+                                color = if (showing) c.orangeInk else c.ink,
+                                fontSize = 16.sp,
+                                fontWeight = if (showing) FontWeight.ExtraBold else FontWeight.SemiBold,
+                            )
+                            Text(
+                                shown(formatAmount(spent, AmountKind.Transfer)),
+                                color = c.ink, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,21 +24,36 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
 
-/** "+ Set new dates" on an occasional event: one more run. Dates can't overlap its other runs. */
+/** Which run sheet is open: a new run for an event, or changing one of its runs (P3-20). */
+data class RunSheetFor(val eventId: Long, val editing: EventRun? = null)
+
+/**
+ * "+ Set new dates" on an occasional event: one more run. Dates can't overlap its other runs.
+ * With [editing] (P3-20) it changes that run's dates instead, and offers Delete.
+ * [onSaved] gets what Undo needs when a run was changed, or null for a new run.
+ */
 @OptIn(ExperimentalTime::class)
 @Composable
-fun EventRunSheet(ledger: Ledger, eventId: Long, onDismiss: () -> Unit, onSaved: () -> Unit) {
+fun EventRunSheet(
+    ledger: Ledger,
+    eventId: Long,
+    onDismiss: () -> Unit,
+    onSaved: (RunUndo?) -> Unit,
+    editing: EventRun? = null,
+    onDeleted: (RunUndo) -> Unit = {},
+) {
     val c = TrackchingTheme.colors
-    val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
+    val zone = remember { TimeZone.currentSystemDefault() }
+    val today = remember { Clock.System.todayIn(zone) }
     val loaded by remember(ledger, eventId) { ledger.runs(eventId) }.collectAsState(initial = null)
     val runs = loaded ?: return
-    var first by remember { mutableStateOf(today) }
-    var last by remember { mutableStateOf(today) }
+    var first by remember { mutableStateOf(editing?.first ?: today) }
+    var last by remember { mutableStateOf(editing?.last ?: today) }
     var picking by remember { mutableStateOf<String?>(null) } // "first" or "last"
     var saved by remember { mutableStateOf(false) }
-    val error = runError(runs, first, last)
+    val error = runError(runs, first, last, except = editing?.id)
 
-    TrackchingSheet(title = "New dates", onDismiss = onDismiss) { close ->
+    TrackchingSheet(title = if (editing == null) "New dates" else "Change dates", onDismiss = onDismiss) { close ->
         Column(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -53,8 +69,12 @@ fun EventRunSheet(ledger: Ledger, eventId: Long, onDismiss: () -> Unit, onSaved:
             OffsetBlock(
                 Modifier.fillMaxWidth().clickable(enabled = canSave, role = Role.Button) {
                     saved = true
-                    ledger.addRun(eventId, first, last)
-                    onSaved()
+                    if (editing == null) {
+                        ledger.addRun(eventId, first, last)
+                        onSaved(null)
+                    } else {
+                        onSaved(ledger.changeRun(editing.id, first, last, zone))
+                    }
                     close()
                 },
                 color = if (canSave) c.orange else c.line,
@@ -67,6 +87,21 @@ fun EventRunSheet(ledger: Ledger, eventId: Long, onDismiss: () -> Unit, onSaved:
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                 )
+            }
+
+            if (editing != null && runs.size > 1) {
+                TextButton(
+                    onClick = {
+                        onDeleted(ledger.deleteRun(editing.id, zone))
+                        close()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("DELETE THESE DATES", color = c.expense, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                }
+            } else if (editing != null) {
+                // An occasional event always keeps one run (its own dates come from its runs).
+                Text("This is the only time. To remove it, delete the event.", color = c.ink2, fontSize = 13.sp)
             }
         }
     }

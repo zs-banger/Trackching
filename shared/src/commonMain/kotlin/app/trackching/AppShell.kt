@@ -141,7 +141,7 @@ private fun MainShell(
     var addingEvent by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Txn?>(null) }
     var editingEvent by remember { mutableStateOf<EventRow?>(null) }
-    var newDatesFor by remember { mutableStateOf<Long?>(null) } // an occasional event's id (P3-19)
+    var runSheet by remember { mutableStateOf<RunSheetFor?>(null) } // new or changed dates of an occasional event (P3-19, P3-20)
     var managingAccounts by remember { mutableStateOf(false) }
     var checkingIn by remember { mutableStateOf(false) }
     val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
@@ -323,7 +323,8 @@ private fun MainShell(
                         onEdit = { editingEvent = it },
                         onOpenTransactions = { bucket, tab -> open(Page.EventHistory(page.id, bucket, tab)) },
                         onLog = { adding = true },
-                        onNewDates = { newDatesFor = page.id },
+                        onNewDates = { runSheet = RunSheetFor(page.id) },
+                        onChangeDates = { run -> runSheet = RunSheetFor(page.id, run) },
                     )
                     is Page.EventHistory -> TransactionsScreen(
                         ledger,
@@ -357,12 +358,17 @@ private fun MainShell(
                     onSaved = { scope.launch { snackbar.showSnackbar("Event saved") } },
                 )
             }
-            newDatesFor?.let { id ->
+            runSheet?.let { open ->
                 EventRunSheet(
                     ledger,
-                    eventId = id,
-                    onDismiss = { newDatesFor = null },
-                    onSaved = { scope.launch { snackbar.showSnackbar("Dates saved") } },
+                    eventId = open.eventId,
+                    editing = open.editing,
+                    onDismiss = { runSheet = null },
+                    onSaved = { changed ->
+                        if (changed == null) scope.launch { snackbar.showSnackbar("Dates saved") }
+                        else showUndo(runMessage("Dates changed", changed)) { ledger.undoRun(changed) }
+                    },
+                    onDeleted = { deleted -> showUndo(runMessage("Dates deleted", deleted)) { ledger.undoRun(deleted) } },
                 )
             }
             if (managingAccounts) {
@@ -401,3 +407,7 @@ private fun MainShell(
         }
     }
 }
+
+/** "Dates deleted · 2 transactions untagged", or just "Dates deleted" when nothing was. */
+internal fun runMessage(what: String, undo: RunUndo): String =
+    if (undo.untagged.isEmpty()) what else "$what · ${plural(undo.untagged.size.toLong(), "transaction")} untagged"
