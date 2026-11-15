@@ -758,7 +758,7 @@ class LedgerTest {
         ledger.eraseAll()
         val opened = openBackup(text)
         assertTrue(opened is Opened.Ok, "a backup from before P3-1 must still open")
-        ledger.restore((opened as Opened.Ok).file)
+        ledger.restore(opened.file)
         assertEquals(emptyList(), ledger.backupFile(d(5, 4)).repeats)
     }
 
