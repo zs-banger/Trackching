@@ -225,6 +225,7 @@ class Ledger(private val db: TrackchingDatabase) {
         return db.transactionWithResult {
             val credit = type == AccountType.Credit
             require(dueDay == null || dueDay in 1..31) { "The due day is a day of the month, 1 to 31" }
+            require(minimumCentavos == null || minimumCentavos >= 0) { "The minimum due can't be below zero" }
             db.accountQueries.create(
                 clean, type.dbName, color, startingCentavos,
                 if (credit) dueDay?.toLong() else null,

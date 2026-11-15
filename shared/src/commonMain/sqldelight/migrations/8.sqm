@@ -1,3 +1,4 @@
 -- P3-12: credit accounts. The type CREDIT was allowed from the start; these are its two optional terms.
-ALTER TABLE account ADD COLUMN due_day INTEGER CHECK (due_day BETWEEN 1 AND 31);
-ALTER TABLE account ADD COLUMN minimum_centavos INTEGER CHECK (minimum_centavos >= 0);
+-- No CHECKs here: SQLDelight can't read a CHECK on an added column, so Ledger.addAccount checks the due day.
+ALTER TABLE account ADD COLUMN due_day INTEGER;
+ALTER TABLE account ADD COLUMN minimum_centavos INTEGER;
