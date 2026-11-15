@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -24,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +44,8 @@ import app.trackching.db.TrackchingDatabase
 import app.trackching.db.Txn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import trackching.shared.generated.resources.Res
@@ -49,6 +54,8 @@ import trackching.shared.generated.resources.ic_events
 import trackching.shared.generated.resources.ic_home
 import trackching.shared.generated.resources.ic_ious
 import trackching.shared.generated.resources.ic_transactions
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /** The 5 bottom tabs. IOUs stays disabled until Phase 3. */
 enum class Tab(
@@ -104,6 +111,7 @@ fun AppShell(database: TrackchingDatabase, version: String = "") {
     }
 }
 
+@OptIn(ExperimentalTime::class)
 @Composable
 private fun MainShell(
     ledger: Ledger,
@@ -134,6 +142,13 @@ private fun MainShell(
     var editing by remember { mutableStateOf<Txn?>(null) }
     var editingEvent by remember { mutableStateOf<EventRow?>(null) }
     var managingAccounts by remember { mutableStateOf(false) }
+    var checkingIn by remember { mutableStateOf(false) }
+    val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
+    val dueCount by remember(ledger) { ledger.dueCount(today) }.collectAsState(initial = 0)
+    // Once per app start: anything due opens the check-in.
+    LaunchedEffect(Unit) {
+        if (ledger.dueRepeats(today).isNotEmpty()) checkingIn = true
+    }
 
     // One place for every "… · Undo" message: shows it for 5 seconds, runs onUndo if tapped.
     fun showUndo(message: String, onUndo: () -> Unit) {
@@ -182,7 +197,13 @@ private fun MainShell(
                                 pages = emptyList()
                             },
                             enabled = t.enabled,
-                            icon = { Icon(painterResource(t.icon), contentDescription = null) },
+                            icon = {
+                                BadgedBox(badge = {
+                                    if (t == Tab.Transactions && dueCount > 0) Badge { Text("$dueCount") }
+                                }) {
+                                    Icon(painterResource(t.icon), contentDescription = null)
+                                }
+                            },
                             label = { Text(t.label, fontWeight = FontWeight.Bold) },
                         )
                     }
@@ -235,6 +256,8 @@ private fun MainShell(
                             },
                             onLog = { adding = true },
                             onOpenReports = { open(Page.IncomeVsExpenses) },
+                            waiting = dueCount,
+                            onCheckIn = { checkingIn = true },
                         )
 
                         Tab.Events -> EventsScreen(ledger, onNewEvent = { addingEvent = true },
@@ -334,6 +357,9 @@ private fun MainShell(
             }
             if (managingAccounts) {
                 ManageAccountsSheet(ledger, onDismiss = { managingAccounts = false })
+            }
+            if (checkingIn) {
+                CheckInSheet(ledger, onDismiss = { checkingIn = false })
             }
             val toEdit = editing
             if (toEdit != null) {
