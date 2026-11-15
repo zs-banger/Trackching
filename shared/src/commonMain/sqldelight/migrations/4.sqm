@@ -1,0 +1,4 @@
+-- Version 4 → 5 (P3-4): an event can repeat every N days, weeks or months.
+-- Both NULL = it doesn't repeat, so every event from before stays as it was.
+ALTER TABLE event ADD COLUMN repeat_every INTEGER CHECK (repeat_every IS NULL OR repeat_every >= 1);
+ALTER TABLE event ADD COLUMN repeat_unit TEXT CHECK (repeat_unit IS NULL OR repeat_unit IN ('DAY', 'WEEK', 'MONTH'));
