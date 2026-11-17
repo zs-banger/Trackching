@@ -151,7 +151,7 @@ fun RankedBars(
                     Text(
                         shown(formatAmount(row.centavos, AmountKind.Transfer)),
                         color = c.onOrange,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                         maxLines = 1,
                         overflow = TextOverflow.Clip,
                     )
@@ -161,7 +161,7 @@ fun RankedBars(
                     Modifier.width(46.dp).padding(bottom = 8.dp),
                     color = c.ink,
                     fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.End,
                 )
             }

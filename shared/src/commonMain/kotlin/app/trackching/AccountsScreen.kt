@@ -115,7 +115,7 @@ fun AccountsScreen(
                         Text(card.name, Modifier.weight(1f), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         Text(
                             "${shown(formatAmount(card.owedNow, AmountKind.Transfer))} owed",
-                            color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold,
+                            color = c.ink, fontSize = 17.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                         )
                     }
                 }
@@ -192,7 +192,7 @@ private fun AccountShareRow(account: Balances, percent: Int, total: Long, held: 
             Text(
                 shown(formatAmount(account.balance, if (account.balance < 0) AmountKind.Expense else AmountKind.Transfer)),
                 color = c.onOrange,
-                fontWeight = FontWeight.ExtraBold,
+                fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
             )
         }
@@ -201,7 +201,7 @@ private fun AccountShareRow(account: Balances, percent: Int, total: Long, held: 
             Modifier.width(46.dp).padding(bottom = 8.dp),
             color = c.ink,
             fontSize = 17.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.End,
         )
     }
