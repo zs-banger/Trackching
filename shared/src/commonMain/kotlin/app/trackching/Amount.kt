@@ -34,7 +34,7 @@ fun Amount(
         modifier = modifier,
         style = TextStyle(
             fontFamily = fonts.condensed,
-            fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onSurface,
         ),
         maxLines = 1,
