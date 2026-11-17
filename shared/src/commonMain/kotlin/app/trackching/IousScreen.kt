@@ -60,7 +60,7 @@ fun IousScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Total ${kind.tabLabel().lowercase()}", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text(shown(formatAmount(view.total, AmountKind.Transfer)), color = c.ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(shown(formatAmount(view.total, AmountKind.Transfer)), color = c.ink, fontSize = 28.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
                     }
                     TextButton(onClick = onOpenDueSoon) {
                         Text("DUE SOON ›", color = c.orangeInk, fontWeight = FontWeight.Bold)
@@ -154,7 +154,7 @@ private fun CreditRow(card: CreditAccounts, today: LocalDate, plans: List<CardPl
             }
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text("${shown(formatAmount(card.owedNow, AmountKind.Transfer))} owed", color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            Text("${shown(formatAmount(card.owedNow, AmountKind.Transfer))} owed", color = c.ink, fontSize = 18.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
             TextButton(onClick = onCharge) { Text("+ ADD CHARGE", color = c.orangeInk, fontWeight = FontWeight.Bold) }
             // P3-13: disabled when nothing is owed.
             TextButton(onClick = onPay, enabled = card.owedNow > 0) {
@@ -179,7 +179,7 @@ private fun PersonRow(line: PersonLine, onClick: () -> Unit) {
             Text(if (line.count == 1) "1 IOU" else "${line.count} IOUs", color = c.ink2, fontSize = 13.sp)
         }
         if (line.overdue) OverdueLabel()
-        Text(shown(formatAmount(line.left, AmountKind.Transfer)), color = c.ink, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        Text(shown(formatAmount(line.left, AmountKind.Transfer)), color = c.ink, fontSize = 20.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
     }
 }
 
@@ -209,7 +209,7 @@ fun IouLine(row: IouRow, showPerson: Boolean, onClick: (() -> Unit)? = null) {
         }
         if (row.overdue) OverdueLabel()
         if (!row.settled) {
-            Text(shown(formatAmount(row.left, AmountKind.Transfer)), color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            Text(shown(formatAmount(row.left, AmountKind.Transfer)), color = c.ink, fontSize = 18.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -220,7 +220,7 @@ private fun OverdueLabel() {
     Text(
         "OVERDUE",
         Modifier.background(c.alert).padding(horizontal = 8.dp, vertical = 2.dp),
-        color = c.onOrange, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
+        color = c.onOrange, fontSize = 12.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
     )
 }
 
@@ -245,7 +245,7 @@ fun PersonIousScreen(
         item(key = "head") {
             Column(Modifier.padding(horizontal = 8.dp)) {
                 BackLink("IOUs", onBack)
-                Text(name, Modifier.padding(horizontal = 8.dp), color = c.ink, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+                Text(name, Modifier.padding(horizontal = 8.dp), color = c.ink, fontSize = 26.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
                 Text(kind.tabLabel(), Modifier.padding(start = 8.dp, bottom = 12.dp), color = c.ink2, fontWeight = FontWeight.Bold)
             }
         }
@@ -264,7 +264,7 @@ fun DueSoonScreen(ledger: Ledger, today: LocalDate, onBack: () -> Unit, onOpenIo
         item(key = "head") {
             Column(Modifier.padding(horizontal = 8.dp)) {
                 BackLink("IOUs", onBack)
-                Text("Due soon", Modifier.padding(horizontal = 8.dp), color = c.ink, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Due soon", Modifier.padding(horizontal = 8.dp), color = c.ink, fontSize = 26.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
                 Text(
                     "Holding isn't here: it has no due date.",
                     Modifier.padding(start = 8.dp, bottom = 12.dp), color = c.ink2, fontSize = 13.sp,
