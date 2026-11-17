@@ -7,6 +7,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 
 /** Follows the phone's light/dark setting and hands out Trackching's colors. */
 @Composable
@@ -40,8 +41,14 @@ fun TrackchingTheme(choice: ThemeChoice = ThemeChoice.System, content: @Composab
         error = brand.alert,
     )
 
-    CompositionLocalProvider(LocalTrackchingColors provides brand) {
-        MaterialTheme(colorScheme = material, content = content)
+    val fonts = trackchingFonts()
+    val typography = remember(fonts) { trackchingTypography(fonts) }
+
+    CompositionLocalProvider(
+        LocalTrackchingColors provides brand,
+        LocalTrackchingFonts provides fonts,
+    ) {
+        MaterialTheme(colorScheme = material, typography = typography, content = content)
     }
 }
 
@@ -50,4 +57,9 @@ object TrackchingTheme {
     val colors: TrackchingColors
         @Composable @ReadOnlyComposable
         get() = LocalTrackchingColors.current
+
+    /** Read fonts anywhere with `TrackchingTheme.fonts.condensed`. */
+    val fonts: TrackchingFonts
+        @Composable @ReadOnlyComposable
+        get() = LocalTrackchingFonts.current
 }

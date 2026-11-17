@@ -96,7 +96,7 @@ fun DeleteCategorySheet(ledger: Ledger, categoryId: Long, name: String, hasSubs:
                     Modifier.padding(12.dp),
                     color = if (canDelete) c.onOrange else c.ink2,
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                 )
             }
         }

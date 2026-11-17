@@ -207,12 +207,12 @@ fun CheckInSheet(ledger: Ledger, onDismiss: () -> Unit) {
                         checkIn.rows.indices.forEach { if (checkIn.canAct(it)) save(it) }
                         parts.rows.indices.forEach { if (parts.canAct(it)) savePart(it) }
                         cards.rows.indices.forEach { if (cards.canSaveAll(it)) saveCard(it) }
-                    }) { Text("SAVE ALL ($waiting)", color = c.ink, fontWeight = FontWeight.ExtraBold) }
+                    }) { Text("SAVE ALL ($waiting)", color = c.ink, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold) }
                 }
                 TextButton(onClick = close) { Text("Later", fontWeight = FontWeight.Bold) }
             } else {
                 OffsetBlock(Modifier.weight(1f)) {
-                    TextButton(onClick = close) { Text("DONE", color = c.ink, fontWeight = FontWeight.ExtraBold) }
+                    TextButton(onClick = close) { Text("DONE", color = c.ink, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold) }
                 }
             }
         }

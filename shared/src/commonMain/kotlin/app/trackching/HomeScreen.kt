@@ -94,7 +94,7 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEv
                 }
             }
             OffsetBlock(Modifier.fillMaxWidth().clickable(role = Role.Button) { addingAccount = true }) {
-                Text("+ ADD ACCOUNT", Modifier.padding(12.dp), color = c.onOrange, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                Text("+ ADD ACCOUNT", Modifier.padding(12.dp), color = c.onOrange, fontSize = 20.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
             }
         }
 
@@ -106,7 +106,7 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEv
             active.forEach { event ->
                 Row(Modifier.fillMaxWidth().clickable { onOpenEvent(event.id) }, verticalAlignment = Alignment.CenterVertically) {
                     Text(event.name, Modifier.weight(1f), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text(shown(formatAmount(event.spent, AmountKind.Transfer)), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(shown(formatAmount(event.spent, AmountKind.Transfer)), color = c.ink, fontSize = 17.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
@@ -126,7 +126,7 @@ fun HomeScreen(ledger: Ledger, onOpen: (Tab) -> Unit, onLog: () -> Unit, onNewEv
                         shown(formatAmount(group.total, AmountKind.Transfer)),
                         Modifier.padding(horizontal = 10.dp),
                         color = c.ink,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                     )
                 }
             }
