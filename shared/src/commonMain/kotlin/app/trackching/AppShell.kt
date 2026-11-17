@@ -255,7 +255,7 @@ private fun MainShell(
                         Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         color = c.onBlue,
                         fontSize = 17.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                     )
                 }
             },

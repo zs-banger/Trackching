@@ -85,7 +85,7 @@ fun EventRunSheet(
                     Modifier.padding(12.dp),
                     color = if (canSave) c.onOrange else c.ink2,
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                 )
             }
 

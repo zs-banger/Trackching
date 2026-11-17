@@ -86,7 +86,7 @@ private fun EventLine(event: EventRow, onClick: () -> Unit) {
             shown(formatAmount(event.spent, AmountKind.Transfer)),
             color = if (event.spent == 0L) c.ink2 else c.ink,
             fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
         )
     }
 }

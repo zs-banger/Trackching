@@ -454,7 +454,7 @@ private fun CategoryTile(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(Modifier.size(28.dp).background(color), contentAlignment = Alignment.Center) {
-            Text(letter, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+            Text(letter, color = Color.White, fontSize = 15.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
         }
         Text(
             name,

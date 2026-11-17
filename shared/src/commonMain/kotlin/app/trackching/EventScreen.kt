@@ -136,7 +136,7 @@ fun EventScreen(
                 Text(
                     periodLabel(periods.period(index)),
                     Modifier.weight(1f),
-                    color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center,
+                    color = c.ink, fontSize = 18.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center,
                 )
                 TextButton(onClick = { picked = index + 1 }, enabled = index < current) { Text("›", fontSize = 24.sp) }
             }

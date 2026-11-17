@@ -66,7 +66,7 @@ fun SetupScreen(ledger: Ledger, onDone: () -> Unit, onRestored: () -> Unit) {
             },
             color = c.ink,
             fontSize = 28.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
         )
 
         // The step's content scrolls; the buttons stay at the bottom.
@@ -128,7 +128,7 @@ fun SetupScreen(ledger: Ledger, onDone: () -> Unit, onRestored: () -> Unit) {
                     Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     color = if (form.canContinue) c.onOrange else c.ink2,
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                 )
             }
         }

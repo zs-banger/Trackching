@@ -116,7 +116,7 @@ fun PayBillSheet(
                     Modifier.padding(12.dp),
                     color = if (canPay) c.onOrange else c.ink2,
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                 )
             }
         }

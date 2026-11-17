@@ -88,7 +88,7 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BackLink("Home", onBack)
-        Text("Settings", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = c.ink)
+        Text("Settings", fontSize = 28.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold, color = c.ink)
 
         Group("Look")
         Text("Theme", color = c.ink2)

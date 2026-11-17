@@ -71,7 +71,7 @@ fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = { back += 1 }) {
-                    Text("‹", color = c.orangeInk, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("‹", color = c.orangeInk, fontSize = 24.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
                 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Tag(monthTag(month)) }
                 TextButton(onClick = { back -= 1 }, enabled = back > 0) {
@@ -79,7 +79,7 @@ fun CategoriesScreen(ledger: Ledger, onLog: () -> Unit) {
                         "›",
                         color = if (back > 0) c.orangeInk else c.line,
                         fontSize = 24.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                     )
                 }
             }

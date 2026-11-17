@@ -70,7 +70,7 @@ fun IouScreen(
                 }
                 Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(kind.withPerson().uppercase(), color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Text(iou.person, color = c.ink, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(iou.person, color = c.ink, fontSize = 26.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
                     if (iou.what_for.isNotBlank()) Text(iou.what_for, color = c.ink2, fontSize = 15.sp)
                 }
             }
@@ -82,14 +82,14 @@ fun IouScreen(
                         Text("What's left", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Text(
                             if (settled) "Settled" else shown(formatAmount(left, AmountKind.Transfer)),
-                            color = c.ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
+                            color = c.ink, fontSize = 28.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                         )
                     }
                     if (overdue) {
                         Text(
                             "OVERDUE",
                             Modifier.background(c.alert).padding(horizontal = 8.dp, vertical = 2.dp),
-                            color = c.onOrange, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
+                            color = c.onOrange, fontSize = 12.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                         )
                     }
                 }
@@ -110,7 +110,7 @@ fun IouScreen(
                         Text(
                             kind.actionLabel().uppercase(),
                             Modifier.padding(12.dp),
-                            color = c.onOrange, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
+                            color = c.onOrange, fontSize = 20.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                         )
                     }
                 }
@@ -141,7 +141,7 @@ fun IouScreen(
                     val extra = if (p.interest_centavos > 0) " · incl. ₱ ${formatCentavos(p.interest_centavos)} interest" else ""
                     Text(p.account + extra, color = c.ink2, fontSize = 13.sp)
                 }
-                Text(shown(formatAmount(p.total, AmountKind.Transfer)), color = c.ink, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text(shown(formatAmount(p.total, AmountKind.Transfer)), color = c.ink, fontSize = 18.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
             }
         }
     }

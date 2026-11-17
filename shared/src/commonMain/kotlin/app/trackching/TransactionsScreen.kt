@@ -88,7 +88,7 @@ fun TransactionsScreen(ledger: Ledger, onOpen: (txnId: Long) -> Unit, onLog: () 
             ) {
                 val things = if (waiting == 1) "1 thing" else "$waiting things" // repeats and IOU payments (P3-17)
                 Text("$things waiting for your OK", Modifier.weight(1f), color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Text("›", color = c.ink, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                Text("›", color = c.ink, fontSize = 20.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
             }
         }
         if (onBack != null) item { BackLink(backTo, onBack) }
@@ -143,7 +143,7 @@ private fun DayHeader(label: String, net: Long) {
     ) {
         Tag(label)
         val kind = if (net < 0) AmountKind.Expense else if (net > 0) AmountKind.Income else AmountKind.Transfer
-        Text(shown(formatAmount(net, kind)), color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+        Text(shown(formatAmount(net, kind)), color = c.ink2, fontSize = 15.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
     }
 }
 
@@ -178,7 +178,7 @@ internal fun TxnRow(row: History, onClick: () -> Unit) {
             Text(title, color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(shown(amountText), color = amountColor, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(shown(amountText), color = amountColor, fontSize = 20.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold, maxLines = 1)
     }
 }
 
@@ -196,7 +196,7 @@ private fun ReportsCard(onOpenIncomeVsExpenses: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Income vs Expenses", Modifier.weight(1f), color = c.ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text("›", color = c.orangeInk, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text("›", color = c.orangeInk, fontSize = 20.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
         }
     }
 }

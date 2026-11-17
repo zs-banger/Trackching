@@ -35,7 +35,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 
-private val StickerText = TextStyle(fontSize = 20.sp, lineHeight = 22.sp, fontWeight = FontWeight.ExtraBold)
+private val StickerText: TextStyle
+    @Composable get() = TextStyle(
+        fontSize = 20.sp,
+        lineHeight = 22.sp,
+        fontFamily = TrackchingTheme.fonts.condensed,
+        fontWeight = FontWeight.ExtraBold,
+    )
 
 /** Draws a solid copy of this box, shifted right and down: the "sticker" edge. */
 fun Modifier.offsetShadow(color: Color, x: Dp = 6.dp, y: Dp = 5.dp): Modifier =
@@ -132,6 +138,7 @@ fun Bar(
                     .background(c.blue)
                     .padding(horizontal = 8.dp, vertical = 1.dp),
                 color = c.onBlue,
+                fontFamily = TrackchingTheme.fonts.condensed,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 1,

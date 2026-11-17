@@ -60,7 +60,7 @@ fun FlowCard(flow: Flow, running: Boolean, onPickTab: (TypeTab) -> Unit, modifie
                         shown(formatAmount(flow.net, kindOfNet(flow.net))),
                         color = colorOfNet(flow.net),
                         fontSize = 26.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold,
                         maxLines = 1,
                     )
                 }
@@ -118,7 +118,7 @@ private fun FlowTile(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("${label.uppercase()} ›", color = c.ink2, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Text(shown(formatAmount(centavos, kind)), color = color, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(shown(formatAmount(centavos, kind)), color = color, fontSize = 18.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold, maxLines = 1)
     }
 }
 
@@ -127,7 +127,7 @@ private fun FlowLine(label: String, value: String) {
     val c = TrackchingTheme.colors
     Row(Modifier.fillMaxWidth()) {
         Text(label, Modifier.weight(1f), color = c.ink2, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Text(value, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+        Text(value, color = c.ink, fontSize = 15.sp, fontFamily = TrackchingTheme.fonts.condensed, fontWeight = FontWeight.ExtraBold)
     }
 }
 
