@@ -37,17 +37,16 @@ FROM event e
 LEFT JOIN txn t ON t.event_id = e.id
 GROUP BY e.id;
 
--- The event covering one day ('YYYY-MM-DD'). Start and end days count; no end = ongoing.
+-- Every event covering one day ('YYYY-MM-DD'), newest start first.
+-- Start and end days count; no end = ongoing.
 -- An occasional event covers only the days of its runs, not the gaps between them.
--- If several overlap, the most recently started wins.
 activeOn:
 SELECT e.id, e.name FROM event e
 WHERE (e.occasional = 0 AND e.start_date <= :day AND (e.end_date IS NULL OR e.end_date >= :day))
    OR (e.occasional = 1 AND EXISTS (
         SELECT 1 FROM event_run r WHERE r.event_id = e.id AND r.start_date <= :day AND r.end_date >= :day
       ))
-ORDER BY e.start_date DESC, e.id DESC
-LIMIT 1;
+ORDER BY e.start_date DESC, e.id DESC;
 
 update:
 UPDATE event SET name = ?, start_date = ?, end_date = ?, repeat_every = ?, repeat_unit = ? WHERE id = ?;

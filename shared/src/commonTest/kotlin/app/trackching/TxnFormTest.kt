@@ -133,11 +133,26 @@ class TxnFormTest {
     }
 
     @Test
-    fun suggestedEventIsUsedUnlessTurnedOff() {
+    fun newestActiveEventIsUsedByDefault() {
         val form = TxnForm(accountId = 1)
-        assertEquals(42L, form.eventFor(42))
+        assertEquals(42L, form.eventFor(listOf(42L, 7L)))
+        assertNull(form.eventFor(emptyList()))
+    }
+
+    @Test
+    fun aTappedEventIsUsedWhileItStillCoversTheDate() {
+        val form = TxnForm(accountId = 1)
+        form.chosenEventId = 7L
+        assertEquals(7L, form.eventFor(listOf(42L, 7L)))
+        assertEquals(42L, form.eventFor(listOf(42L))) // a new date it doesn't cover
+    }
+
+    @Test
+    fun noEventWinsOverAnyChoice() {
+        val form = TxnForm(accountId = 1)
+        form.chosenEventId = 7L
         form.tagOff = true
-        assertEquals(null, form.eventFor(42))
+        assertNull(form.eventFor(listOf(42L, 7L)))
     }
 
     @Test

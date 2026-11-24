@@ -557,6 +557,14 @@ class LedgerTest {
     }
 
     @Test
+    fun overlappingEventsAreAllOfferedNewestFirst() {
+        val fund = ledger.addEvent("Laptop fund", d(11, 1), null)
+        val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
+        assertEquals(listOf(trip, fund), ledger.activeEventsOn(d(12, 21)).map { it.id })
+        assertEquals(listOf(fund), ledger.activeEventsOn(d(12, 24)).map { it.id }) // the trip is over
+    }
+
+    @Test
     fun loggingWithAnEventTagsIt() {
         val trip = ledger.addEvent("Baguio", d(12, 20), d(12, 23))
         val id = ledger.logExpense(50_000, category("Meals"), cash(), 0, eventId = trip)
