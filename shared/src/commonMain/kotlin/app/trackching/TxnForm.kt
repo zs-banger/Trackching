@@ -37,6 +37,9 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
     /** True after tapping "No event": save without the suggested tag. */
     var tagOff by mutableStateOf(false)
 
+    /** The event you tapped, when more than one is active. Null = the newest. */
+    var chosenEventId by mutableStateOf<Long?>(null)
+
     /** The Repeat row. Only used for new transactions. */
     val repeat = RepeatForm()
 
@@ -44,8 +47,15 @@ class TxnForm(accountId: Long?, val editingId: Long? = null) {
     var repeatId: Long? = null
         private set
 
-    /** The event to save with: the suggestion, unless you turned it off. */
-    fun eventFor(suggested: Long?): Long? = if (tagOff) null else suggested
+    /**
+     * The event to save with. `active` is every event on the transaction's date, newest first.
+     * Your pick if it's still active on that date, otherwise the newest; none if you turned it off.
+     */
+    fun eventFor(active: List<Long>): Long? = when {
+        tagOff -> null
+        chosenEventId in active -> chosenEventId
+        else -> active.firstOrNull()
+    }
 
     val centavos: Long get() = parseCentavos(typed) ?: 0L
 
