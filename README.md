@@ -1,12 +1,17 @@
 # Trackching
 
-A personal finance tracker. It tracks and gives reports on your spending, income, accounts,
+A personal finance tracker. It prioritizes tracking cash flow and gives reports on your spending, income, accounts,
 credit and IOUs by the day and by event. This will be available as a mobile application for Android.
 A web app version is planned to be developed in the future for iPhones.
 
 ## About this project
-Trackching is a side project of mine which I built with the purpose of learning and practicing Kotlin and Android mobile development.
-I run it like a small team project, with planned stories, PR reviews and CI.
+Trackching is among a line of side projects of mine which I built with the purpose of project-based learning.
+
+### Learning Objective
+Learn software development workflow, specifically Android mobile app development.
+
+### Methodology
+Simulate a small team project, with planned stories, PR reviews and CI, where I act as an intern, client, and UI/UX designer at the same time with Claude acting as the project manager, designer, and developer.
 
 ## Project layout
 
