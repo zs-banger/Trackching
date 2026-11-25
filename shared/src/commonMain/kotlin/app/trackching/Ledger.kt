@@ -481,9 +481,12 @@ class Ledger(private val db: TrackchingDatabase) {
         db.txnQueries.setEvent(eventId, txnId)
     }
 
-    /** The event a transaction on `day` should be tagged to, or null. */
-    fun activeEventOn(day: LocalDate): ActiveOn? =
-        db.eventQueries.activeOn(day.toString()).executeAsOneOrNull()
+    /** Every event covering a day, newest first. Empty when none does. */
+    fun activeEventsOn(day: LocalDate): List<ActiveOn> =
+        db.eventQueries.activeOn(day.toString()).executeAsList()
+
+    /** The event a new transaction on that day is tagged to by default: the newest. */
+    fun activeEventOn(day: LocalDate): ActiveOn? = activeEventsOn(day).firstOrNull()
 
     /** One event, re-sent when it changes. Null once it's deleted. */
     fun event(id: Long): Flow<Event?> =

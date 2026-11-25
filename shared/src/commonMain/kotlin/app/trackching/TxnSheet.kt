@@ -63,11 +63,12 @@ fun TxnSheet(
         ledger.quickCategories(categoryKind, if (showAll) 100L else 8L)
     }
     var pickingDate by remember { mutableStateOf(false) }
-    // Which event this transaction falls in, by its date. Only for new expenses and income.
+    // Every event this transaction falls in, by its date, newest first. Only for new expenses and income.
     val zone = remember { TimeZone.currentSystemDefault() }
-    val suggested = remember(form.date, form.pickedDay) {
-        if (editing != null) null else ledger.activeEventOn(dayOf(form.occurredAt(nowMillis()), zone))
+    val activeEvents = remember(form.date, form.pickedDay) {
+        if (editing != null) emptyList() else ledger.activeEventsOn(dayOf(form.occurredAt(nowMillis()), zone))
     }
+    val activeIds = activeEvents.map { it.id }
     // The day this transaction falls on: the repeat starts here.
     val startDay = remember(form.date, form.pickedDay) { dayOf(form.occurredAt(nowMillis()), zone) }
     // When editing: the repeat it came from, if it's still going.
@@ -159,10 +160,16 @@ fun TxnSheet(
             if (onCredit) {
                 Field("Installments") { CardPlanFields(cardPlan, form.centavos, onPickFirst = { pickingFirstDue = true }) }
             }
-            if (suggested != null && form.kind != AmountKind.Transfer) {
+            if (activeEvents.isNotEmpty() && form.kind != AmountKind.Transfer) {
+                val tagged = form.eventFor(activeIds)
                 Field("Event") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip(suggested.name, selected = !form.tagOff, onClick = { form.tagOff = false })
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        activeEvents.forEach { event ->
+                            Chip(event.name, selected = tagged == event.id, onClick = {
+                                form.tagOff = false
+                                form.chosenEventId = event.id
+                            })
+                        }
                         Chip("No event", selected = form.tagOff, onClick = { form.tagOff = true })
                     }
                 }
@@ -241,7 +248,7 @@ fun TxnSheet(
                 val category = form.categoryId
                 val to = form.toAccountId
                 val repeatRule = form.repeat.rule(startDay)
-                val event = form.eventFor(suggested?.id)
+                val event = form.eventFor(activeIds)
                 val id = when {
                     account == null -> null
                     inParts && newPlan != null && category != null ->
